@@ -8,6 +8,11 @@ def mix_wavs(mic_path: Path, system_path: Path, output_path: Path) -> None:
     rate_a, data_a = wavfile.read(str(mic_path))
     rate_b, data_b = wavfile.read(str(system_path))
 
+    if rate_a != rate_b:
+        raise ValueError(
+            f"Sample rate mismatch: mic={rate_a} Hz, system={rate_b} Hz"
+        )
+
     # Ensure mono int16
     if data_a.ndim > 1:
         data_a = data_a.mean(axis=1).astype(np.int16)
