@@ -8,6 +8,9 @@ import tempfile
 def test_pipeline_success_writes_note(tmp_path):
     from pipeline.processor import run_pipeline, PipelineResult
 
+    (tmp_path / "mic.wav").touch()
+    (tmp_path / "sys.wav").touch()
+
     with patch("pipeline.processor.mix_wavs") as mock_mix, \
          patch("pipeline.processor.transcribe", return_value=["[00:00] Hello."]) as mock_tr, \
          patch("pipeline.processor.summarize", return_value="## TL;DR\n- Done.") as mock_sum, \
@@ -38,6 +41,9 @@ def test_pipeline_ollama_failure_saves_note_without_summary(tmp_path):
     from pipeline.processor import run_pipeline
     from summarizer.ollama import OllamaUnavailableError
 
+    (tmp_path / "mic.wav").touch()
+    (tmp_path / "sys.wav").touch()
+
     with patch("pipeline.processor.mix_wavs"), \
          patch("pipeline.processor.transcribe", return_value=["[00:00] Hello."]), \
          patch("pipeline.processor.summarize", side_effect=OllamaUnavailableError("down")), \
@@ -58,9 +64,7 @@ def test_pipeline_ollama_failure_saves_note_without_summary(tmp_path):
 
     assert result.success is True
     # Verify write_note was called with a summary containing the unavailability warning
-    call_args = mock_wn.call_args
-    summary_arg = call_args[1].get("summary") or call_args[0][2]
-    assert "Summary unavailable" in summary_arg
+    assert "Summary unavailable" in mock_wn.call_args.kwargs["summary"]
 
 
 def test_pipeline_whisper_failure_writes_error_file(tmp_path):

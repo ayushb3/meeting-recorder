@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from notes.writer import note_filename, week_folder, write_note
+from notes.writer import week_folder, write_note
 from recorder.mixer import mix_wavs
 from summarizer.ollama import OllamaUnavailableError, summarize
 from transcriber.whisper import TranscriptionError, transcribe
@@ -43,10 +43,14 @@ def run_pipeline(
     # Move raw audio to week folder
     dest_mic = week_dir / mic_path.name
     dest_sys = week_dir / system_path.name
-    if mic_path != dest_mic and mic_path.exists():
-        shutil.move(str(mic_path), dest_mic)
-    if system_path != dest_sys and system_path.exists():
-        shutil.move(str(system_path), dest_sys)
+    if mic_path != dest_mic:
+        if not mic_path.exists():
+            return write_error("setup", f"Mic audio file not found: {mic_path}")
+        shutil.move(mic_path, dest_mic)
+    if system_path != dest_sys:
+        if not system_path.exists():
+            return write_error("setup", f"System audio file not found: {system_path}")
+        shutil.move(system_path, dest_sys)
 
     # Mix
     try:
