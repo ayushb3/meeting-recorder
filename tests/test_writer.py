@@ -48,3 +48,27 @@ def test_write_note_creates_file():
         assert path.exists()
         assert path.parent.name == "2026-W16"
         assert path.name == "2026-04-13-14h30-meeting.md"
+
+
+def test_write_note_raises_on_existing_file():
+    from notes.writer import write_note
+    dt = datetime(2026, 4, 13, 14, 30)
+    with tempfile.TemporaryDirectory() as d:
+        output_dir = Path(d)
+        # Write once successfully
+        write_note(
+            dt=dt,
+            duration_seconds=100,
+            summary="## TL;DR\n- Test",
+            transcript_lines=["[00:00] Hello."],
+            output_dir=output_dir,
+        )
+        # Second write should raise
+        with pytest.raises(FileExistsError):
+            write_note(
+                dt=dt,
+                duration_seconds=100,
+                summary="## TL;DR\n- Test",
+                transcript_lines=["[00:00] Hello."],
+                output_dir=output_dir,
+            )

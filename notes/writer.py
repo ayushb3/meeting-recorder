@@ -9,6 +9,7 @@ def week_folder(dt: datetime) -> str:
 
 
 def note_filename(dt: datetime) -> str:
+    """Return the note filename, e.g. '2026-04-13-14h30-meeting.md'."""
     return dt.strftime("%Y-%m-%d-%Hh%M-meeting.md")
 
 
@@ -48,5 +49,7 @@ def write_note(
     folder = output_dir / week_folder(dt)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / note_filename(dt)
-    path.write_text(format_note(dt, duration_seconds, summary, transcript_lines))
+    if path.exists():
+        raise FileExistsError(f"Note already exists: {path}")
+    path.write_text(format_note(dt, duration_seconds, summary, transcript_lines), encoding="utf-8")
     return path
