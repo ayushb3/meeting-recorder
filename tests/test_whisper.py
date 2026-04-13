@@ -19,7 +19,7 @@ def test_parse_whisper_json():
     lines = parse_whisper_json(SAMPLE_WHISPER_JSON)
     assert lines == [
         "[00:00] Hello everyone.",
-        "[00:00] Let's get started.",
+        "[00:05] Let's get started.",
         "[01:30] Any questions?",
     ]
 

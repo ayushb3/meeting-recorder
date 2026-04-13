@@ -14,10 +14,9 @@ def parse_whisper_json(data: dict) -> list[str]:
     for seg in data.get("transcription", []):
         timestamp = seg["timestamps"]["from"]  # "HH:MM:SS,mmm"
         h, m, rest = timestamp.split(":")
-        s_raw = int(rest.split(",")[0])
+        s = rest.split(",")[0]  # e.g. "05"
         total_minutes = int(h) * 60 + int(m)
-        s = (s_raw // 10) * 10
-        label = f"[{total_minutes:02d}:{s:02d}]"
+        label = f"[{total_minutes:02d}:{s}]"
         text = seg["text"].strip()
         lines.append(f"{label} {text}")
     return lines
