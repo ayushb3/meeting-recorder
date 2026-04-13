@@ -30,7 +30,7 @@ def summarize(transcript_lines: list[str], model: str, host: str) -> str:
             json={"model": model, "prompt": prompt, "stream": False},
             timeout=120,
         )
-    except requests.ConnectionError as e:
+    except (requests.ConnectionError, requests.Timeout) as e:
         raise OllamaUnavailableError(f"Cannot reach Ollama at {host}") from e
 
     response.raise_for_status()

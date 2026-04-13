@@ -44,3 +44,12 @@ def test_summarize_raises_on_connection_error():
     with patch("summarizer.ollama.requests.post", side_effect=requests.ConnectionError):
         with pytest.raises(OllamaUnavailableError):
             summarize(["[00:00] Hello."], "llama3.2", "http://localhost:11434")
+
+
+def test_summarize_raises_on_timeout():
+    from summarizer.ollama import OllamaUnavailableError, summarize
+    import requests as req
+
+    with patch("summarizer.ollama.requests.post", side_effect=req.Timeout):
+        with pytest.raises(OllamaUnavailableError):
+            summarize(["[00:00] Hello."], "llama3.2", "http://localhost:11434")
