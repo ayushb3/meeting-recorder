@@ -4,7 +4,6 @@ import threading
 import time
 from pathlib import Path
 
-import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
@@ -32,6 +31,11 @@ class AudioRecorder:
         self._sys_q: queue.Queue = queue.Queue()
         self._stop_event = threading.Event()
         self._start_time: float | None = None
+        self._mic_stream = None
+        self._sys_stream = None
+        self._mic_writer = None
+        self._sys_writer = None
+        self._write_error: str | None = None
 
     def start(self) -> None:
         self._stop_event.clear()
@@ -64,11 +68,19 @@ class AudioRecorder:
         self._sys_writer.start()
 
     def stop(self) -> None:
+        if self._mic_stream is None:
+            return  # not started
         self._stop_event.set()
         self._mic_stream.stop()
         self._sys_stream.stop()
         self._mic_writer.join(timeout=5)
+        if self._mic_writer.is_alive():
+            raise RuntimeError("Mic writer thread did not finish within timeout — WAV file may be incomplete")
         self._sys_writer.join(timeout=5)
+        if self._sys_writer.is_alive():
+            raise RuntimeError("System writer thread did not finish within timeout — WAV file may be incomplete")
+        if self._write_error:
+            raise RuntimeError(f"Audio write failed: {self._write_error}")
 
     def elapsed_seconds(self) -> float:
         if self._start_time is None:
@@ -76,12 +88,15 @@ class AudioRecorder:
         return time.time() - self._start_time
 
     def _write_loop(self, q: queue.Queue, path: Path) -> None:
-        with sf.SoundFile(
-            str(path), mode="w", samplerate=SAMPLE_RATE, channels=CHANNELS, subtype="PCM_16"
-        ) as f:
-            while not self._stop_event.is_set() or not q.empty():
-                try:
-                    data = q.get(timeout=0.1)
-                    f.write(data)
-                except queue.Empty:
-                    continue
+        try:
+            with sf.SoundFile(
+                str(path), mode="w", samplerate=SAMPLE_RATE, channels=CHANNELS, subtype="PCM_16"
+            ) as f:
+                while not self._stop_event.is_set() or not q.empty():
+                    try:
+                        data = q.get(timeout=0.1)
+                        f.write(data)
+                    except queue.Empty:
+                        continue
+        except Exception as e:
+            self._write_error = str(e)
