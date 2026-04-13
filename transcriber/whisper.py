@@ -36,6 +36,8 @@ def transcribe(audio_path: Path, whisper_binary: Path, model: str) -> list[str]:
         raise TranscriptionError(f"whisper.cpp failed: {result.stderr}")
 
     json_path = Path(str(audio_path) + ".json")
+    if not json_path.exists():
+        raise TranscriptionError(f"whisper.cpp produced no output file at {json_path}")
     with open(json_path) as f:
         data = json.load(f)
     return parse_whisper_json(data)
