@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import tomllib
 
-@dataclass
+@dataclass(frozen=True)
 class Config:
     output_dir: Path
     system_device: str
@@ -15,6 +15,7 @@ class Config:
     keep_audio: bool
     min_recording_seconds: int
     low_disk_threshold_mb: int
+
 
 def load_config(path: Path) -> Config:
     if not path.exists():
