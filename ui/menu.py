@@ -1,4 +1,5 @@
 # ui/menu.py
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -13,6 +14,8 @@ from config import Config
 from pipeline.processor import run_pipeline
 from recorder.audio import AudioRecorder
 
+log = logging.getLogger(__name__)
+
 
 class MeetingRecorderApp(rumps.App):
     def __init__(self, config: Config):
@@ -24,9 +27,11 @@ class MeetingRecorderApp(rumps.App):
         self._timer_thread: threading.Thread | None = None
         self._session_dt: datetime | None = None
 
+        self._record_item = rumps.MenuItem("Start Recording", callback=self.toggle_recording)
+        self._reprocess_item = rumps.MenuItem("Reprocess Last Meeting", callback=self.reprocess)
         self.menu = [
-            rumps.MenuItem("Start Recording", callback=self.toggle_recording),
-            rumps.MenuItem("Reprocess Last Meeting", callback=self.reprocess),
+            self._record_item,
+            self._reprocess_item,
             rumps.MenuItem("Open Today's Note", callback=self.open_note),
             rumps.separator,
             rumps.MenuItem("Preferences", callback=self.open_prefs),
@@ -36,7 +41,7 @@ class MeetingRecorderApp(rumps.App):
 
     def _set_idle(self):
         self.title = "●"
-        self.menu["Reprocess Last Meeting"].set_callback(
+        self._reprocess_item.set_callback(
             self.reprocess if self._has_error_files() else None
         )
 
@@ -55,6 +60,7 @@ class MeetingRecorderApp(rumps.App):
         self._recording = True
         self._session_dt = datetime.now()
         session_name = self._session_dt.strftime("%Y-%m-%d-%Hh%M")
+        log.info("Recording started: %s", session_name)
 
         self._tmp_dir = Path(tempfile.mkdtemp())
 
@@ -65,7 +71,7 @@ class MeetingRecorderApp(rumps.App):
             session_name=session_name,
         )
         self._recorder.start()
-        self.menu["Start Recording"].title = "Stop Recording"
+        self._record_item.title = "Stop Recording"
         self._timer_thread = threading.Thread(target=self._update_timer, daemon=True)
         self._timer_thread.start()
 
@@ -77,19 +83,22 @@ class MeetingRecorderApp(rumps.App):
 
         self._recorder.stop()
         duration = int(self._recorder.elapsed_seconds())
-        self.menu["Start Recording"].title = "Start Recording"
+        self._record_item.title = "Start Recording"
+        log.info("Recording stopped: duration=%ds, mic=%s, sys=%s", duration, self._recorder.mic_path, self._recorder.system_path)
 
         mic_path = self._recorder.mic_path
         sys_path = self._recorder.system_path
         session_dt = self._session_dt
 
         if duration < self.config.min_recording_seconds:
+            log.warning("Recording too short (%ds < %ds) — discarded.", duration, self.config.min_recording_seconds)
             rumps.notification("Meeting Recorder", "", "Recording too short — discarded.")
             shutil.rmtree(self._tmp_dir, ignore_errors=True)
             self._set_idle()
             return
 
         self.title = "● Processing..."
+        log.info("Dispatching pipeline: mic=%s sys=%s duration=%ds", mic_path, sys_path, duration)
         threading.Thread(
             target=self._run_pipeline,
             args=(mic_path, sys_path, session_dt, duration),

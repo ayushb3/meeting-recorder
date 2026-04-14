@@ -1,4 +1,5 @@
 # pipeline/processor.py
+import logging
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,6 +9,8 @@ from notes.writer import week_folder, write_note
 from recorder.mixer import mix_wavs
 from summarizer.ollama import OllamaUnavailableError, summarize
 from transcriber.whisper import TranscriptionError, transcribe
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,24 +57,33 @@ def run_pipeline(
 
     # Mix
     try:
+        log.info("Mixing audio: %s + %s -> %s", dest_mic.name, dest_sys.name, mixed_path.name)
         mix_wavs(dest_mic, dest_sys, mixed_path)
     except Exception as e:
+        log.error("Mix failed: %s", e)
         return write_error("mix", str(e))
 
     # Transcribe
     try:
+        log.info("Transcribing with whisper: model=%s", whisper_model)
         transcript_lines = transcribe(mixed_path, whisper_binary, whisper_model)
+        log.info("Transcription done: %d lines", len(transcript_lines))
     except TranscriptionError as e:
+        log.error("Transcription failed: %s", e)
         return write_error("transcribe", str(e))
 
     # Summarize (non-fatal if Ollama down)
     try:
+        log.info("Summarizing with Ollama: model=%s", ollama_model)
         summary = summarize(transcript_lines, ollama_model, ollama_host)
-    except OllamaUnavailableError:
+        log.info("Summary done (%d chars)", len(summary))
+    except OllamaUnavailableError as e:
+        log.warning("Ollama unavailable: %s — saving note without summary", e)
         summary = "⚠ Summary unavailable — Ollama was not reachable during processing."
 
     # Write note
     try:
+        log.info("Writing note to %s", output_dir)
         note_path = write_note(
             dt=session_dt,
             duration_seconds=duration_seconds,
@@ -79,7 +91,9 @@ def run_pipeline(
             transcript_lines=transcript_lines,
             output_dir=output_dir,
         )
+        log.info("Note written: %s", note_path)
     except Exception as e:
+        log.error("Write note failed: %s", e)
         return write_error("write_note", str(e))
 
     # Clean up mixed audio if keep_audio is False

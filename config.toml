@@ -1,9 +1,9 @@
 [paths]
-output_dir = "/Users/I589687/Documents/WorkNotes/Work/Meetings"
+output_dir = "/Users/I589687/Documents/WorkNotes/Work/MeetingRecordings"
 
 [audio]
 system_device = "BlackHole 2ch"
-mic_device = "default"
+mic_device = "MacBook Pro Microphone"
 
 [whisper]
 model = "/opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v3.bin"
@@ -15,5 +15,5 @@ host = "http://localhost:11434"
 
 [processing]
 keep_audio = true
-min_recording_seconds = 30
+min_recording_seconds = 5
 low_disk_threshold_mb = 500
