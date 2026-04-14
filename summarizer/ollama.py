@@ -33,5 +33,9 @@ def summarize(transcript_lines: list[str], model: str, host: str) -> str:
     except (requests.ConnectionError, requests.Timeout) as e:
         raise OllamaUnavailableError(f"Cannot reach Ollama at {host}") from e
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        raise OllamaUnavailableError(f"Ollama returned error {response.status_code}: {response.text[:200]}") from e
+
     return response.json()["response"]
