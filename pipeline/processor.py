@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 class PipelineResult:
     success: bool
     note_path: Path | None = None
+    session_dir: Path | None = None
     error_stage: str | None = None
     error_message: str | None = None
 
@@ -32,10 +33,17 @@ def run_pipeline(
     ollama_model: str,
     ollama_host: str,
     keep_audio: bool,
+    meeting_name: str | None = None,
 ) -> PipelineResult:
     week_dir = output_dir / week_folder(session_dt)
-    session_name = session_dt.strftime("%Y-%m-%d-%Hh%M")
-    session_dir = week_dir / session_name
+    timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
+    if meeting_name:
+        import re
+        slug = re.sub(r"[\s_]+", "-", re.sub(r"[^\w\s-]", "", meeting_name.strip().lower()))[:60]
+        session_dir_name = f"{timestamp}-{slug}"
+    else:
+        session_dir_name = timestamp
+    session_dir = week_dir / session_dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
     mixed_path = session_dir / "audio-mixed.wav"
 
@@ -103,4 +111,4 @@ def run_pipeline(
         dest_mic.unlink(missing_ok=True)
         dest_sys.unlink(missing_ok=True)
 
-    return PipelineResult(success=True, note_path=note_path)
+    return PipelineResult(success=True, note_path=note_path, session_dir=session_dir)
