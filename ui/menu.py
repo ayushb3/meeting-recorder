@@ -50,7 +50,6 @@ class MeetingRecorderApp(rumps.App):
         self._timer_thread: threading.Thread | None = None
         self._session_dt: datetime | None = None
         self._meeting_name: str | None = None  # set via "Set Meeting Name..."
-        self._pending_rename: tuple | None = None
         self._pending_stop: tuple | None = None
 
         self._record_item = rumps.MenuItem("Start Recording", callback=self.toggle_recording)
@@ -179,7 +178,11 @@ class MeetingRecorderApp(rumps.App):
             dimensions=(320, 24),
         )
         name_resp = name_win.run()
-        meeting_name = name_resp.text.strip() if name_resp.clicked and name_resp.text.strip() else pre_name
+        if name_resp.clicked:
+            typed = name_resp.text.strip()
+            meeting_name = typed if typed else pre_name
+        else:
+            meeting_name = pre_name
 
         # Window 2: optional context for the LLM
         ctx_win = rumps.Window(
@@ -251,53 +254,6 @@ class MeetingRecorderApp(rumps.App):
             self.title = "⚠ Error"
             rumps.notification("Meeting Recorder", "Unexpected error", str(e))
             self._set_idle()
-
-    def _show_rename_popup(self, timer):
-        timer.stop()
-        if self._pending_rename:
-            note_path, session_dir = self._pending_rename
-            self._pending_rename = None
-            self._prompt_rename(note_path, session_dir)
-
-    def _prompt_rename(self, note_path: Path, session_dir: Path):
-        """Show a popup after save — lets user rename the meeting."""
-        display_name = session_dir.name
-        window = rumps.Window(
-            message=f"Note saved to:\n{note_path}\n\nGive this meeting a name (or leave blank to keep the timestamp):",
-            title="Meeting Saved",
-            default_text=self._meeting_name or "",
-            ok="Rename",
-            cancel="Keep Timestamp",
-            dimensions=(300, 24),
-        )
-        response = window.run()
-        if response.clicked and response.text.strip():
-            new_name = response.text.strip()
-            self._rename_session(session_dir, new_name)
-
-    def _rename_session(self, session_dir: Path, new_name: str):
-        """Rename the session folder and note title."""
-        slug = slugify(new_name)
-        timestamp = session_dir.name  # e.g. 2026-04-14-14h30
-        new_dir_name = f"{timestamp}-{slug}"
-        new_dir = session_dir.parent / new_dir_name
-
-        try:
-            session_dir.rename(new_dir)
-            log.info("Renamed session dir: %s -> %s", session_dir.name, new_dir_name)
-
-            # Update the note's H1 title line
-            note_path = new_dir / "meeting.md"
-            if note_path.exists():
-                text = note_path.read_text(encoding="utf-8")
-                # Replace the first H1 line (whatever it is) with the new name
-                text = re.sub(r"^# .+$", f"# {new_name}", text, count=1, flags=re.MULTILINE)
-                note_path.write_text(text, encoding="utf-8")
-
-            rumps.notification("Meeting Recorder", "Renamed", f"Saved as: {new_dir_name}")
-        except Exception as e:
-            log.error("Rename failed: %s", e)
-            rumps.notification("Meeting Recorder", "Rename failed", str(e))
 
     # ------------------------------------------------------------ timer
 

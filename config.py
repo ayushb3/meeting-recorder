@@ -9,19 +9,20 @@ import tomllib
 APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "MeetingRecorder"
 USER_CONFIG_PATH = APP_SUPPORT_DIR / "config.toml"
 
+# Paths that use this sentinel are from the template and haven't been edited yet
+_TEMPLATE_WHISPER_BINARY = "/opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v3.bin"
+
 
 def _bundled_template() -> Path:
     """Find config.template.toml next to this file or in the .app bundle."""
+    import os
+    import sys
     candidates = [
         Path(__file__).parent / "config.template.toml",  # dev / repo
     ]
-    # PyInstaller bundle
-    import sys
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         candidates.insert(0, Path(sys._MEIPASS) / "config.template.toml")
-    # py2app bundle: RESOURCEPATH env var points to Contents/Resources
-    import os
-    resource_path = os.environ.get("RESOURCEPATH")
+    resource_path = os.environ.get("RESOURCEPATH")  # py2app
     if resource_path:
         candidates.insert(0, Path(resource_path) / "config.template.toml")
 
@@ -31,24 +32,21 @@ def _bundled_template() -> Path:
     raise FileNotFoundError("config.template.toml not found in bundle")
 
 
-def ensure_user_config() -> Path:
+def ensure_user_config() -> tuple[Path, bool]:
     """
-    Return the path to the user's config.
+    Return (config_path, is_first_run).
 
-    On first launch, copy the bundled template to
-    ~/Library/Application Support/MeetingRecorder/config.toml
-    and open it in the default editor so the user can fill in their paths.
+    On first launch, copy the bundled template and open it in the default
+    editor.  The caller should warn the user to quit-and-relaunch after saving.
     """
     if USER_CONFIG_PATH.exists():
-        return USER_CONFIG_PATH
+        return USER_CONFIG_PATH, False
 
     APP_SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
     template = _bundled_template()
     shutil.copy(template, USER_CONFIG_PATH)
-
-    # Open in default editor so the user fills it in
     subprocess.run(["open", str(USER_CONFIG_PATH)])
-    return USER_CONFIG_PATH
+    return USER_CONFIG_PATH, True
 
 
 @dataclass(frozen=True)
@@ -56,7 +54,7 @@ class Config:
     output_dir: Path
     system_device: str
     mic_device: str
-    whisper_model: str
+    whisper_model: Path
     whisper_binary: Path
     ollama_model: str
     ollama_host: str
@@ -70,11 +68,12 @@ def load_config(path: Path) -> Config:
         raise FileNotFoundError(f"Config not found: {path}")
     with open(path, "rb") as f:
         raw = tomllib.load(f)
-    return Config(
+
+    cfg = Config(
         output_dir=Path(raw["paths"]["output_dir"]).expanduser(),
         system_device=raw["audio"]["system_device"],
         mic_device=raw["audio"]["mic_device"],
-        whisper_model=raw["whisper"]["model"],
+        whisper_model=Path(raw["whisper"]["model"]),
         whisper_binary=Path(raw["whisper"]["binary"]),
         ollama_model=raw["ollama"]["model"],
         ollama_host=raw["ollama"]["host"],
@@ -82,3 +81,16 @@ def load_config(path: Path) -> Config:
         min_recording_seconds=raw["processing"]["min_recording_seconds"],
         low_disk_threshold_mb=raw["processing"]["low_disk_threshold_mb"],
     )
+
+    if not cfg.whisper_binary.exists():
+        raise ValueError(
+            f"whisper binary not found: {cfg.whisper_binary}\n"
+            f"Install with: brew install whisper-cpp"
+        )
+    if not cfg.whisper_model.exists():
+        raise ValueError(
+            f"whisper model not found: {cfg.whisper_model}\n"
+            f"Download a model and update [whisper] model in your config."
+        )
+
+    return cfg

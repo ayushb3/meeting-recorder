@@ -31,7 +31,7 @@ def run_pipeline(
     duration_seconds: int,
     output_dir: Path,
     whisper_binary: Path,
-    whisper_model: str,
+    whisper_model: Path,
     ollama_model: str,
     ollama_host: str,
     keep_audio: bool,
@@ -68,11 +68,11 @@ def run_pipeline(
     # Transcribe both sources and merge
     try:
         log.info("Transcribing system audio: %s", dest_sys.name)
-        sys_segments = transcribe_raw(dest_sys, whisper_binary, whisper_model, source="system")
+        sys_segments = transcribe_raw(dest_sys, whisper_binary, str(whisper_model), source="system")
         log.info("System transcription: %d segments", len(sys_segments))
 
         log.info("Transcribing mic audio: %s", dest_mic.name)
-        mic_segments = transcribe_raw(dest_mic, whisper_binary, whisper_model, source="mic")
+        mic_segments = transcribe_raw(dest_mic, whisper_binary, str(whisper_model), source="mic")
         log.info("Mic transcription: %d segments", len(mic_segments))
 
         transcript_lines = merge_transcripts(sys_segments, mic_segments)
