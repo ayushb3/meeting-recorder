@@ -1,16 +1,33 @@
 # pipeline/processor.py
 import logging
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+from scipy.io import wavfile
+
 from notes.writer import week_folder, write_note
-from recorder.mixer import mix_wavs
 from summarizer.ollama import OllamaUnavailableError, summarize
 from transcriber.whisper import TranscriptionError, transcribe
 
 log = logging.getLogger(__name__)
+
+
+def _is_silent(wav_path: Path, silence_threshold_rms: float = 50.0) -> bool:
+    """Return True if the WAV file has no meaningful audio content."""
+    try:
+        _, data = wavfile.read(str(wav_path))
+        if data.ndim > 1:
+            data = data.mean(axis=1)
+        rms = float(np.sqrt(np.mean(data.astype(np.float32) ** 2)))
+        log.info("RMS for %s: %.1f", wav_path.name, rms)
+        return rms < silence_threshold_rms
+    except Exception as e:
+        log.warning("Could not check silence for %s: %s", wav_path.name, e)
+        return False
 
 
 @dataclass
@@ -38,14 +55,12 @@ def run_pipeline(
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
     if meeting_name:
-        import re
         slug = re.sub(r"[\s_]+", "-", re.sub(r"[^\w\s-]", "", meeting_name.strip().lower()))[:60]
         session_dir_name = f"{timestamp}-{slug}"
     else:
         session_dir_name = timestamp
     session_dir = week_dir / session_dir_name
     session_dir.mkdir(parents=True, exist_ok=True)
-    mixed_path = session_dir / "audio-mixed.wav"
 
     def write_error(stage: str, message: str) -> PipelineResult:
         error_path = session_dir / f"{stage}.error"
@@ -64,18 +79,19 @@ def run_pipeline(
             return write_error("setup", f"System audio file not found: {system_path}")
         shutil.move(system_path, dest_sys)
 
-    # Mix
-    try:
-        log.info("Mixing audio: %s + %s -> %s", dest_mic.name, dest_sys.name, mixed_path.name)
-        mix_wavs(dest_mic, dest_sys, mixed_path)
-    except Exception as e:
-        log.error("Mix failed: %s", e)
-        return write_error("mix", str(e))
+    # Choose transcription source: system audio preferred, mic as fallback
+    if _is_silent(dest_sys):
+        log.info("System audio is silent — falling back to mic for transcription")
+        transcribe_path = dest_mic
+        audio_source = "mic"
+    else:
+        transcribe_path = dest_sys
+        audio_source = "system"
+    log.info("Transcribing %s audio: %s", audio_source, transcribe_path.name)
 
     # Transcribe
     try:
-        log.info("Transcribing with whisper: model=%s", whisper_model)
-        transcript_lines = transcribe(mixed_path, whisper_binary, whisper_model)
+        transcript_lines = transcribe(transcribe_path, whisper_binary, whisper_model)
         log.info("Transcription done: %d lines", len(transcript_lines))
     except TranscriptionError as e:
         log.error("Transcription failed: %s", e)
@@ -98,6 +114,7 @@ def run_pipeline(
             duration_seconds=duration_seconds,
             summary=summary,
             transcript_lines=transcript_lines,
+            audio_files=[dest_mic, dest_sys],
             output_dir=session_dir,
         )
         log.info("Note written: %s", note_path)
@@ -105,9 +122,8 @@ def run_pipeline(
         log.error("Write note failed: %s", e)
         return write_error("write_note", str(e))
 
-    # Clean up mixed audio if keep_audio is False
+    # Clean up audio if keep_audio is False
     if not keep_audio:
-        mixed_path.unlink(missing_ok=True)
         dest_mic.unlink(missing_ok=True)
         dest_sys.unlink(missing_ok=True)
 

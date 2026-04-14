@@ -33,6 +33,20 @@ def test_note_content_structure():
     assert "[00:00] Hello." in content
 
 
+def test_note_embeds_audio_files():
+    from notes.writer import format_note
+    dt = datetime(2026, 4, 13, 14, 30)
+    with tempfile.TemporaryDirectory() as d:
+        mic = Path(d) / "audio-mic.wav"
+        sys_audio = Path(d) / "audio-system.wav"
+        mic.touch()
+        sys_audio.touch()
+        content = format_note(dt, 100, "## TL;DR\n- Test", ["[00:00] Hi."], audio_files=[mic, sys_audio])
+        assert "![[audio-mic.wav]]" in content
+        assert "![[audio-system.wav]]" in content
+        assert "## Audio" in content
+
+
 def test_write_note_creates_file():
     from notes.writer import write_note
     dt = datetime(2026, 4, 13, 14, 30)
