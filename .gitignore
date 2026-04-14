@@ -1,1 +1,11 @@
 .worktrees/
+__pycache__/
+*.py[cod]
+*.wav
+*.error
+.env
+*.egg-info/
+dist/
+build/
+.DS_Store
+.venv/

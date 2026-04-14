@@ -1,0 +1,19 @@
+[paths]
+output_dir = "/Users/I589687/Documents/WorkNotes/Work/Meetings"
+
+[audio]
+system_device = "BlackHole 2ch"
+mic_device = "default"
+
+[whisper]
+model = "/opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v3.bin"
+binary = "/opt/homebrew/bin/whisper-cli"
+
+[ollama]
+model = "llama3.3:70b"
+host = "http://localhost:11434"
+
+[processing]
+keep_audio = true
+min_recording_seconds = 30
+low_disk_threshold_mb = 500
