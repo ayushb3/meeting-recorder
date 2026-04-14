@@ -51,11 +51,12 @@ def write_note(
     transcript_lines: list[str],
     output_dir: Path,
     audio_files: list[Path] | None = None,
+    overwrite: bool = False,
 ) -> Path:
     """Write the Obsidian note into output_dir. Returns the note path."""
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / note_filename(dt)
-    if path.exists():
+    if path.exists() and not overwrite:
         raise FileExistsError(f"Note already exists: {path}")
     path.write_text(format_note(dt, duration_seconds, summary, transcript_lines, audio_files), encoding="utf-8")
     return path

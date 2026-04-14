@@ -99,6 +99,7 @@ def run_pipeline(
             transcript_lines=transcript_lines,
             audio_files=[dest_mic, dest_sys],
             output_dir=session_dir,
+            overwrite=True,
         )
         log.info("Note written: %s", note_path)
     except Exception as e:
