@@ -6,28 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
-from scipy.io import wavfile
-
 from notes.writer import week_folder, write_note
 from summarizer.ollama import OllamaUnavailableError, summarize
-from transcriber.whisper import TranscriptionError, transcribe
+from transcriber.whisper import TranscriptionError, merge_transcripts, transcribe_raw
 
 log = logging.getLogger(__name__)
 
 
-def _is_silent(wav_path: Path, silence_threshold_rms: float = 50.0) -> bool:
-    """Return True if the WAV file has no meaningful audio content."""
-    try:
-        _, data = wavfile.read(str(wav_path))
-        if data.ndim > 1:
-            data = data.mean(axis=1)
-        rms = float(np.sqrt(np.mean(data.astype(np.float32) ** 2)))
-        log.info("RMS for %s: %.1f", wav_path.name, rms)
-        return rms < silence_threshold_rms
-    except Exception as e:
-        log.warning("Could not check silence for %s: %s", wav_path.name, e)
-        return False
 
 
 @dataclass
@@ -79,20 +64,18 @@ def run_pipeline(
             return write_error("setup", f"System audio file not found: {system_path}")
         shutil.move(system_path, dest_sys)
 
-    # Choose transcription source: system audio preferred, mic as fallback
-    if _is_silent(dest_sys):
-        log.info("System audio is silent — falling back to mic for transcription")
-        transcribe_path = dest_mic
-        audio_source = "mic"
-    else:
-        transcribe_path = dest_sys
-        audio_source = "system"
-    log.info("Transcribing %s audio: %s", audio_source, transcribe_path.name)
-
-    # Transcribe
+    # Transcribe both sources and merge
     try:
-        transcript_lines = transcribe(transcribe_path, whisper_binary, whisper_model)
-        log.info("Transcription done: %d lines", len(transcript_lines))
+        log.info("Transcribing system audio: %s", dest_sys.name)
+        sys_segments = transcribe_raw(dest_sys, whisper_binary, whisper_model, source="system")
+        log.info("System transcription: %d segments", len(sys_segments))
+
+        log.info("Transcribing mic audio: %s", dest_mic.name)
+        mic_segments = transcribe_raw(dest_mic, whisper_binary, whisper_model, source="mic")
+        log.info("Mic transcription: %d segments", len(mic_segments))
+
+        transcript_lines = merge_transcripts(sys_segments, mic_segments)
+        log.info("Merged transcript: %d lines", len(transcript_lines))
     except TranscriptionError as e:
         log.error("Transcription failed: %s", e)
         return write_error("transcribe", str(e))
