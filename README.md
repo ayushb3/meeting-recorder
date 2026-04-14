@@ -35,6 +35,8 @@ Then set up a Multi-Output Device so Teams/browser audio goes to both your speak
 3. Check **BlackHole 2ch** and your speakers/headphones
 4. Right-click the new device → **Use This Device for Sound Output**
 
+> **Volume note:** When using the Multi-Output Device, macOS volume keys won't work directly. To adjust volume during a meeting: temporarily switch System Audio output back to your speakers/headphones, adjust, then switch back to the Multi-Output Device. Alternatively, use the volume control on your physical speakers or headphones if available.
+
 ### 2. whisper.cpp — local transcription
 
 ```bash
@@ -60,6 +62,8 @@ Download from [ollama.com](https://ollama.com), then:
 ollama pull llama3.1:8b   # ~5 GB, works well on 16 GB+ RAM
 ollama serve              # start before using the app
 ```
+
+> **Resource usage:** `ollama serve` idles at ~50–100 MB RAM with no active requests — it's cheap to leave running all day. The 8B model only loads into GPU/RAM when a request comes in (i.e. after you stop a recording), then unloads after a short timeout. You won't notice it while working normally.
 
 ---
 
@@ -192,6 +196,31 @@ title: Q2 Planning With Design Team
 ## Full Transcript
 [00:00] Hello everyone...
 ```
+
+---
+
+## Launch on startup
+
+### Meeting Recorder
+
+Copy the app to `/Applications` first, then add it to Login Items:
+
+**macOS Ventura / Sonoma (13+):**
+System Settings → General → Login Items → click **+** → select `Meeting Recorder.app`
+
+**Older macOS:**
+System Preferences → Users & Groups → Login Items → click **+** → select `Meeting Recorder.app`
+
+### Ollama
+
+The Ollama desktop app (from [ollama.com](https://ollama.com)) auto-starts on login by default once installed — no extra steps needed. If you installed via Homebrew instead:
+
+```bash
+# Register as a background service that starts on login
+brew services start ollama
+```
+
+To verify it's running: `curl http://localhost:11434` should return `Ollama is running`.
 
 ---
 
