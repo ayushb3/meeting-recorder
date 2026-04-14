@@ -39,6 +39,7 @@ class MeetingRecorderApp(rumps.App):
         self._timer_thread: threading.Thread | None = None
         self._session_dt: datetime | None = None
         self._meeting_name: str | None = None  # set via "Set Meeting Name..."
+        self._pending_rename: tuple | None = None
 
         self._record_item = rumps.MenuItem("Start Recording", callback=self.toggle_recording)
         self._name_item = rumps.MenuItem("Set Meeting Name...", callback=self.set_meeting_name)
@@ -181,7 +182,9 @@ class MeetingRecorderApp(rumps.App):
                 self.title = ""
                 self._set_idle()
                 log.info("Pipeline complete: %s", result.note_path)
-                self._prompt_rename(result.note_path, result.session_dir)
+                # Must show window on main thread
+                self._pending_rename = (result.note_path, result.session_dir)
+                rumps.Timer(self._show_rename_popup, 0.1).start()
             else:
                 self.title = "⚠ Error"
                 rumps.notification(
@@ -193,6 +196,13 @@ class MeetingRecorderApp(rumps.App):
             self.title = "⚠ Error"
             rumps.notification("Meeting Recorder", "Unexpected error", str(e))
             self._set_idle()
+
+    def _show_rename_popup(self, timer):
+        timer.stop()
+        if self._pending_rename:
+            note_path, session_dir = self._pending_rename
+            self._pending_rename = None
+            self._prompt_rename(note_path, session_dir)
 
     def _prompt_rename(self, note_path: Path, session_dir: Path):
         """Show a popup after save — lets user rename the meeting."""
