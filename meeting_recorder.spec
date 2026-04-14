@@ -15,7 +15,6 @@ a = Analysis(
         ('assets/icon-recording.png', 'assets'),
         ('assets/icon.icns', '.'),
         ('config.template.toml', '.'),
-        ('setup-guide.md', '.'),
     ],
     hiddenimports=[
         'rumps',
