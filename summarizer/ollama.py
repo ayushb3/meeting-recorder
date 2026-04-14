@@ -1,3 +1,5 @@
+import re
+
 import requests
 
 
@@ -26,6 +28,14 @@ Additional context provided by the organizer:
 
 """
 
+TITLE_PROMPT = """\
+Given this meeting summary, reply with ONLY a short title (3-6 words, title case, no punctuation).
+Do not explain. Output the title alone on one line.
+
+Summary:
+{summary}
+"""
+
 
 def summarize(transcript_lines: list[str], model: str, host: str, context: str | None = None) -> str:
     """Send transcript to Ollama and return the summary text."""
@@ -47,3 +57,21 @@ def summarize(transcript_lines: list[str], model: str, host: str, context: str |
         raise OllamaUnavailableError(f"Ollama returned error {response.status_code}: {response.text[:200]}") from e
 
     return response.json()["response"]
+
+
+def suggest_title(summary: str, model: str, host: str) -> str | None:
+    """Ask Ollama for a short meeting title based on the summary. Returns None on any failure."""
+    prompt = TITLE_PROMPT.format(summary=summary[:2000])
+    try:
+        response = requests.post(
+            f"{host}/api/generate",
+            json={"model": model, "prompt": prompt, "stream": False},
+            timeout=30,
+        )
+        response.raise_for_status()
+        title = response.json()["response"].strip().splitlines()[0].strip()
+        # Strip surrounding quotes the model sometimes adds
+        title = re.sub(r'^["\']|["\']$', "", title).strip()
+        return title if title else None
+    except Exception:
+        return None

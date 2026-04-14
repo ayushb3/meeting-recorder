@@ -241,7 +241,7 @@ class MeetingRecorderApp(rumps.App):
                 rumps.notification(
                     "Meeting Recorder",
                     "Note saved",
-                    str(result.note_path.name) if result.note_path else "Done",
+                    result.meeting_name or (result.session_dir.name if result.session_dir else "Done"),
                 )
             else:
                 self.title = "⚠ Error"

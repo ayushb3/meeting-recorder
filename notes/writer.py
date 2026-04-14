@@ -28,15 +28,14 @@ def format_note(
         embeds = "\n".join(f"![[{f.name}]]" for f in audio_files if f.exists())
         if embeds:
             audio_block = f"\n## Audio\n\n{embeds}\n"
-    title = meeting_name if meeting_name else f"Meeting — {dt.strftime('%Y-%m-%d %H:%M')}"
+    title = meeting_name if meeting_name else f"Meeting {dt.strftime('%Y-%m-%d %H:%M')}"
     return f"""---
 date: {dt.strftime("%Y-%m-%d")}
 time: {dt.strftime("%H:%M")}
 duration: {duration_min}m
 tags: [meeting, transcript]
+title: {title}
 ---
-
-# {title}
 
 {summary}
 {audio_block}

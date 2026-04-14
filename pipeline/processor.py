@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from notes.writer import week_folder, write_note
-from summarizer.ollama import OllamaUnavailableError, summarize
+from summarizer.ollama import OllamaUnavailableError, suggest_title, summarize
 from transcriber.whisper import TranscriptionError, merge_transcripts, transcribe_raw
 
 log = logging.getLogger(__name__)
@@ -20,8 +20,13 @@ class PipelineResult:
     success: bool
     note_path: Path | None = None
     session_dir: Path | None = None
+    meeting_name: str | None = None
     error_stage: str | None = None
     error_message: str | None = None
+
+
+def _slugify(name: str) -> str:
+    return re.sub(r"[\s_]+", "-", re.sub(r"[^\w\s-]", "", name.strip().lower()))[:60]
 
 
 def run_pipeline(
@@ -40,12 +45,8 @@ def run_pipeline(
 ) -> PipelineResult:
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
-    if meeting_name:
-        slug = re.sub(r"[\s_]+", "-", re.sub(r"[^\w\s-]", "", meeting_name.strip().lower()))[:60]
-        session_dir_name = f"{timestamp}-{slug}"
-    else:
-        session_dir_name = timestamp
-    session_dir = week_dir / session_dir_name
+    # Use a timestamped placeholder until we know the final name
+    session_dir = week_dir / timestamp
     session_dir.mkdir(parents=True, exist_ok=True)
 
     def write_error(stage: str, message: str) -> PipelineResult:
@@ -86,11 +87,29 @@ def run_pipeline(
         log.info("Summarizing with Ollama: model=%s", ollama_model)
         summary = summarize(transcript_lines, ollama_model, ollama_host, context=llm_context)
         log.info("Summary done (%d chars)", len(summary))
+
+        # If no user-supplied name, ask the LLM to suggest one from the summary
+        if not meeting_name:
+            meeting_name = suggest_title(summary, ollama_model, ollama_host)
+            if meeting_name:
+                log.info("LLM suggested title: %r", meeting_name)
     except OllamaUnavailableError as e:
         log.warning("Ollama unavailable: %s — saving note without summary", e)
         summary = "⚠ Summary unavailable — Ollama was not reachable during processing."
 
-    # Write note
+    # Rename session dir now that we have a final name
+    if meeting_name:
+        slug = _slugify(meeting_name)
+        named_dir = week_dir / slug
+        try:
+            session_dir.rename(named_dir)
+            session_dir = named_dir
+            log.info("Session dir renamed to: %s", session_dir.name)
+        except Exception as e:
+            log.warning("Could not rename session dir: %s", e)
+            # Keep the timestamp dir, update dest paths below
+    dest_mic = session_dir / "audio-mic.wav"
+    dest_sys = session_dir / "audio-system.wav"
     try:
         log.info("Writing note to %s", session_dir)
         note_path = write_note(
@@ -113,4 +132,4 @@ def run_pipeline(
         dest_mic.unlink(missing_ok=True)
         dest_sys.unlink(missing_ok=True)
 
-    return PipelineResult(success=True, note_path=note_path, session_dir=session_dir)
+    return PipelineResult(success=True, note_path=note_path, session_dir=session_dir, meeting_name=meeting_name)
