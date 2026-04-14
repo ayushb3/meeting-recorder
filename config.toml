@@ -6,11 +6,11 @@ system_device = "BlackHole 2ch"
 mic_device = "default"
 
 [whisper]
-model = "large-v3"
-binary = "/usr/local/bin/whisper-cpp"
+model = "base"
+binary = "/opt/homebrew/bin/whisper-cli"
 
 [ollama]
-model = "llama3.2"
+model = "llama3.1:8b"
 host = "http://localhost:11434"
 
 [processing]
