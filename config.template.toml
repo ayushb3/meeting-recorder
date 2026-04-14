@@ -1,0 +1,24 @@
+[paths]
+# Where meeting notes and audio are saved (Obsidian vault subfolder recommended)
+output_dir = "~/Documents/MeetingRecordings"
+
+[audio]
+# Run: python3 -c "import sounddevice; print(sounddevice.query_devices())" to list devices
+system_device = "BlackHole 2ch"
+mic_device = "MacBook Pro Microphone"
+
+[whisper]
+# Install: brew install whisper-cpp
+# Download model: whisper-cpp --download-model large-v3  (or adjust path below)
+model = "/opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v3.bin"
+binary = "/opt/homebrew/bin/whisper-cli"
+
+[ollama]
+# Install: brew install ollama && ollama pull llama3.1:8b
+model = "llama3.1:8b"
+host = "http://localhost:11434"
+
+[processing]
+keep_audio = true
+min_recording_seconds = 30
+low_disk_threshold_mb = 500

@@ -14,16 +14,24 @@ Given this meeting transcript, produce:
 
 Use markdown headings (## TL;DR, ## Topics Covered, ## Key Decisions, ## Action Items).
 Format action items as: - Person — task by deadline
-
+{context_block}
 Transcript:
 {transcript}
 """
 
+CONTEXT_BLOCK = """\
 
-def summarize(transcript_lines: list[str], model: str, host: str) -> str:
+Additional context provided by the organizer:
+{context}
+
+"""
+
+
+def summarize(transcript_lines: list[str], model: str, host: str, context: str | None = None) -> str:
     """Send transcript to Ollama and return the summary text."""
     transcript = "\n".join(transcript_lines)
-    prompt = PROMPT_TEMPLATE.format(transcript=transcript)
+    context_block = CONTEXT_BLOCK.format(context=context) if context else ""
+    prompt = PROMPT_TEMPLATE.format(transcript=transcript, context_block=context_block)
     try:
         response = requests.post(
             f"{host}/api/generate",

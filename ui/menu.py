@@ -3,6 +3,7 @@ import logging
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -17,8 +18,18 @@ from recorder.audio import AudioRecorder
 
 log = logging.getLogger(__name__)
 
-ICON_IDLE = str(Path(__file__).parent.parent / "assets" / "icon.png")
-ICON_RECORDING = str(Path(__file__).parent.parent / "assets" / "icon-recording.png")
+
+def _bundle_resource(rel_path: str) -> str:
+    """Resolve a resource path that works in dev mode and inside the .app bundle."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller bundle: resources are next to the executable in _MEIPASS
+        return str(Path(sys._MEIPASS) / rel_path)
+    # Dev mode: relative to repo root (parent of ui/)
+    return str(Path(__file__).parent.parent / rel_path)
+
+
+ICON_IDLE = _bundle_resource("assets/icon.png")
+ICON_RECORDING = _bundle_resource("assets/icon-recording.png")
 
 
 def slugify(name: str) -> str:
@@ -40,6 +51,7 @@ class MeetingRecorderApp(rumps.App):
         self._session_dt: datetime | None = None
         self._meeting_name: str | None = None  # set via "Set Meeting Name..."
         self._pending_rename: tuple | None = None
+        self._pending_stop: tuple | None = None
 
         self._record_item = rumps.MenuItem("Start Recording", callback=self.toggle_recording)
         self._name_item = rumps.MenuItem("Set Meeting Name...", callback=self.set_meeting_name)
@@ -126,13 +138,9 @@ class MeetingRecorderApp(rumps.App):
             self._set_idle()
             return
 
-        self.title = "Processing..."
-        log.info("Dispatching pipeline: mic=%s sys=%s duration=%ds name=%s", mic_path, sys_path, duration, meeting_name)
-        threading.Thread(
-            target=self._run_pipeline,
-            args=(mic_path, sys_path, session_dt, duration, meeting_name),
-            daemon=True,
-        ).start()
+        # Show name + context modal on main thread before dispatching
+        self._pending_stop = (mic_path, sys_path, session_dt, duration, meeting_name)
+        rumps.Timer(self._show_stop_modal, 0.1).start()
 
     # --------------------------------------------------------- meeting naming
 
@@ -153,6 +161,49 @@ class MeetingRecorderApp(rumps.App):
 
     # ------------------------------------------------------------ pipeline
 
+    def _show_stop_modal(self, timer):
+        """Main-thread modal shown after Stop Recording — collect name + context."""
+        timer.stop()
+        if not self._pending_stop:
+            return
+        mic_path, sys_path, session_dt, duration, pre_name = self._pending_stop
+        self._pending_stop = None
+
+        # Window 1: meeting name
+        name_win = rumps.Window(
+            message="Meeting name (used for folder and note title):",
+            title="Meeting Saved",
+            default_text=pre_name or "",
+            ok="Next",
+            cancel="Skip",
+            dimensions=(320, 24),
+        )
+        name_resp = name_win.run()
+        meeting_name = name_resp.text.strip() if name_resp.clicked and name_resp.text.strip() else pre_name
+
+        # Window 2: optional context for the LLM
+        ctx_win = rumps.Window(
+            message="Add context for the AI summary (optional):\ne.g. 'Q2 planning with design team, focused on redesign timeline'",
+            title="Meeting Context",
+            default_text="",
+            ok="Process",
+            cancel="Skip",
+            dimensions=(320, 60),
+        )
+        ctx_resp = ctx_win.run()
+        llm_context = ctx_resp.text.strip() if ctx_resp.clicked and ctx_resp.text.strip() else None
+
+        self.title = "Processing..."
+        log.info("Dispatching pipeline: mic=%s sys=%s duration=%ds name=%s context=%s",
+                 mic_path, sys_path, duration, meeting_name, llm_context)
+        threading.Thread(
+            target=self._run_pipeline,
+            args=(mic_path, sys_path, session_dt, duration, meeting_name, llm_context),
+            daemon=True,
+        ).start()
+
+    # ------------------------------------------------------------ pipeline
+
     def _run_pipeline(
         self,
         mic_path: Path,
@@ -160,6 +211,7 @@ class MeetingRecorderApp(rumps.App):
         session_dt: datetime,
         duration: int,
         meeting_name: str | None,
+        llm_context: str | None = None,
         error_file: Path | None = None,
     ):
         try:
@@ -169,6 +221,7 @@ class MeetingRecorderApp(rumps.App):
                 session_dt=session_dt,
                 duration_seconds=duration,
                 meeting_name=meeting_name,
+                llm_context=llm_context,
                 output_dir=self.config.output_dir,
                 whisper_binary=self.config.whisper_binary,
                 whisper_model=self.config.whisper_model,
@@ -182,9 +235,11 @@ class MeetingRecorderApp(rumps.App):
                 self.title = ""
                 self._set_idle()
                 log.info("Pipeline complete: %s", result.note_path)
-                # Must show window on main thread
-                self._pending_rename = (result.note_path, result.session_dir)
-                rumps.Timer(self._show_rename_popup, 0.1).start()
+                rumps.notification(
+                    "Meeting Recorder",
+                    "Note saved",
+                    str(result.note_path.name) if result.note_path else "Done",
+                )
             else:
                 self.title = "⚠ Error"
                 rumps.notification(
@@ -277,7 +332,7 @@ class MeetingRecorderApp(rumps.App):
         self.title = "Processing..."
         threading.Thread(
             target=self._run_pipeline,
-            args=(mic_path, sys_path, dt, 0, None),
+            args=(mic_path, sys_path, dt, 0, None, None),
             kwargs={"error_file": error_file},
             daemon=True,
         ).start()
@@ -294,4 +349,6 @@ class MeetingRecorderApp(rumps.App):
             rumps.notification("Meeting Recorder", "", "No note found for today.")
 
     def open_prefs(self, _):
-        subprocess.run(["open", str(Path(__file__).parent.parent / "config.toml")])
+        from config import USER_CONFIG_PATH, ensure_user_config
+        ensure_user_config()
+        subprocess.run(["open", str(USER_CONFIG_PATH)])

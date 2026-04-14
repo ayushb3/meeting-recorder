@@ -36,6 +36,7 @@ def run_pipeline(
     ollama_host: str,
     keep_audio: bool,
     meeting_name: str | None = None,
+    llm_context: str | None = None,
 ) -> PipelineResult:
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
@@ -83,7 +84,7 @@ def run_pipeline(
     # Summarize (non-fatal if Ollama down)
     try:
         log.info("Summarizing with Ollama: model=%s", ollama_model)
-        summary = summarize(transcript_lines, ollama_model, ollama_host)
+        summary = summarize(transcript_lines, ollama_model, ollama_host, context=llm_context)
         log.info("Summary done (%d chars)", len(summary))
     except OllamaUnavailableError as e:
         log.warning("Ollama unavailable: %s — saving note without summary", e)
