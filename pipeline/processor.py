@@ -101,6 +101,7 @@ def run_pipeline(
             audio_files=[dest_mic, dest_sys],
             output_dir=session_dir,
             overwrite=True,
+            meeting_name=meeting_name,
         )
         log.info("Note written: %s", note_path)
     except Exception as e:

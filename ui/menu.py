@@ -254,6 +254,10 @@ class MeetingRecorderApp(rumps.App):
             self.title = "⚠ Error"
             rumps.notification("Meeting Recorder", "Unexpected error", str(e))
             self._set_idle()
+        finally:
+            # Clean up temp dir if it still exists (pipeline moves files out on success)
+            if hasattr(self, '_tmp_dir') and self._tmp_dir and self._tmp_dir.exists():
+                shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
     # ------------------------------------------------------------ timer
 
