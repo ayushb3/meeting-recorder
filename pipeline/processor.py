@@ -34,18 +34,19 @@ def run_pipeline(
     keep_audio: bool,
 ) -> PipelineResult:
     week_dir = output_dir / week_folder(session_dt)
-    week_dir.mkdir(parents=True, exist_ok=True)
     session_name = session_dt.strftime("%Y-%m-%d-%Hh%M")
-    mixed_path = week_dir / f"{session_name}-audio-mixed.wav"
+    session_dir = week_dir / session_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    mixed_path = session_dir / "audio-mixed.wav"
 
     def write_error(stage: str, message: str) -> PipelineResult:
-        error_path = week_dir / f"{session_name}-{stage}.error"
+        error_path = session_dir / f"{stage}.error"
         error_path.write_text(f"stage: {stage}\nerror: {message}\n")
         return PipelineResult(success=False, error_stage=stage, error_message=message)
 
-    # Move raw audio to week folder
-    dest_mic = week_dir / mic_path.name
-    dest_sys = week_dir / system_path.name
+    # Move raw audio into session folder
+    dest_mic = session_dir / "audio-mic.wav"
+    dest_sys = session_dir / "audio-system.wav"
     if mic_path != dest_mic:
         if not mic_path.exists():
             return write_error("setup", f"Mic audio file not found: {mic_path}")
@@ -83,13 +84,13 @@ def run_pipeline(
 
     # Write note
     try:
-        log.info("Writing note to %s", output_dir)
+        log.info("Writing note to %s", session_dir)
         note_path = write_note(
             dt=session_dt,
             duration_seconds=duration_seconds,
             summary=summary,
             transcript_lines=transcript_lines,
-            output_dir=output_dir,
+            output_dir=session_dir,
         )
         log.info("Note written: %s", note_path)
     except Exception as e:

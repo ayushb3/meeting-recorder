@@ -13,7 +13,7 @@ def test_week_folder_name():
 def test_note_filename():
     from notes.writer import note_filename
     dt = datetime(2026, 4, 13, 14, 30)
-    assert note_filename(dt) == "2026-04-13-14h30-meeting.md"
+    assert note_filename(dt) == "meeting.md"
 
 
 def test_note_content_structure():
@@ -37,17 +37,18 @@ def test_write_note_creates_file():
     from notes.writer import write_note
     dt = datetime(2026, 4, 13, 14, 30)
     with tempfile.TemporaryDirectory() as d:
-        output_dir = Path(d)
+        # Processor now passes session_dir directly
+        session_dir = Path(d) / "2026-W16" / "2026-04-13-14h30"
         path = write_note(
             dt=dt,
             duration_seconds=100,
             summary="## TL;DR\n- Test",
             transcript_lines=["[00:00] Hello."],
-            output_dir=output_dir,
+            output_dir=session_dir,
         )
         assert path.exists()
-        assert path.parent.name == "2026-W16"
-        assert path.name == "2026-04-13-14h30-meeting.md"
+        assert path.parent.name == "2026-04-13-14h30"
+        assert path.name == "meeting.md"
 
 
 def test_write_note_raises_on_existing_file():

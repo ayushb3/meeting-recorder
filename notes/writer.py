@@ -9,8 +9,8 @@ def week_folder(dt: datetime) -> str:
 
 
 def note_filename(dt: datetime) -> str:
-    """Return the note filename, e.g. '2026-04-13-14h30-meeting.md'."""
-    return dt.strftime("%Y-%m-%d-%Hh%M-meeting.md")
+    """Return the note filename. When inside a session folder, just 'meeting.md'."""
+    return "meeting.md"
 
 
 def format_note(
@@ -45,10 +45,9 @@ def write_note(
     transcript_lines: list[str],
     output_dir: Path,
 ) -> Path:
-    """Write the Obsidian note to the correct week folder. Returns the note path."""
-    folder = output_dir / week_folder(dt)
-    folder.mkdir(parents=True, exist_ok=True)
-    path = folder / note_filename(dt)
+    """Write the Obsidian note into output_dir. Returns the note path."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / note_filename(dt)
     if path.exists():
         raise FileExistsError(f"Note already exists: {path}")
     path.write_text(format_note(dt, duration_seconds, summary, transcript_lines), encoding="utf-8")

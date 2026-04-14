@@ -157,10 +157,10 @@ class MeetingRecorderApp(rumps.App):
         if not error_files:
             return
         error_file = sorted(error_files)[-1]
-        session_name = error_file.stem.rsplit("-", 1)[0]
-        week_dir = error_file.parent
-        mic_path = week_dir / f"{session_name}-audio-mic.wav"
-        sys_path = week_dir / f"{session_name}-audio-system.wav"
+        session_dir = error_file.parent
+        session_name = session_dir.name
+        mic_path = session_dir / "audio-mic.wav"
+        sys_path = session_dir / "audio-system.wav"
         dt = datetime.strptime(session_name, "%Y-%m-%d-%Hh%M")
         self.title = "● Processing..."
         threading.Thread(
