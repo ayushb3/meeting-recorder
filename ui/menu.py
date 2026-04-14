@@ -134,7 +134,8 @@ class MeetingRecorderApp(rumps.App):
             m, s = divmod(elapsed, 60)
             self.title = f"● Recording... ({m:02d}:{s:02d})"
 
-            stat = shutil.disk_usage(self.config.output_dir)
+            disk_check_path = self.config.output_dir if self.config.output_dir.exists() else Path.home()
+            stat = shutil.disk_usage(disk_check_path)
             free_mb = stat.free // (1024 * 1024)
             if free_mb < self.config.low_disk_threshold_mb:
                 self._stop_recording()
