@@ -22,3 +22,6 @@ host = "http://localhost:11434"
 keep_audio = true
 min_recording_seconds = 30
 low_disk_threshold_mb = 500
+# Mic RMS threshold (0–32767). Frames below this are silenced (suppresses speaker backwash).
+# Raise if you still hear bleed; lower if your own voice is being cut off.
+mic_threshold = 300

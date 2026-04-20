@@ -19,14 +19,16 @@ class Segment:
 def parse_whisper_json(data: dict, source: str = "system") -> list[Segment]:
     """Parse whisper.cpp JSON output into Segment objects."""
     segments = []
+    last_text = None
     for seg in data.get("transcription", []):
         timestamp = seg["timestamps"]["from"]  # "HH:MM:SS,mmm"
         h, m, rest = timestamp.split(":")
         s, ms = rest.split(",")
         start_seconds = int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
         text = seg["text"].strip()
-        if text:
+        if text and text != last_text:
             segments.append(Segment(start_seconds=start_seconds, text=text, source=source))
+            last_text = text
     return segments
 
 
@@ -54,8 +56,8 @@ def _similarity(a: str, b: str) -> float:
 def merge_transcripts(
     system_segments: list[Segment],
     mic_segments: list[Segment],
-    similarity_threshold: float = 0.85,
-    time_window_seconds: float = 2.0,
+    similarity_threshold: float = 0.7,
+    time_window_seconds: float = 3.0,
 ) -> list[str]:
     """
     Merge system and mic transcripts into a single sorted transcript.

@@ -4,6 +4,7 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
@@ -11,6 +12,10 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
 BLOCK_SIZE = 1024
+
+# RMS threshold below which mic frames are replaced with silence (backwash filter).
+# int16 range is 0–32767; 300 ≈ ~0.9% of max, catches breath/bleed without clipping speech.
+MIC_SILENCE_THRESHOLD = 300
 
 
 class AudioRecorder:
@@ -22,11 +27,13 @@ class AudioRecorder:
         system_device: str,
         output_dir: Path,
         session_name: str,
+        mic_threshold: int = MIC_SILENCE_THRESHOLD,
     ):
         self.mic_device = mic_device
         self.system_device = system_device
         self.mic_path = output_dir / f"{session_name}-audio-mic.wav"
         self.system_path = output_dir / f"{session_name}-audio-system.wav"
+        self._mic_threshold = mic_threshold
         self._mic_q: queue.Queue = queue.Queue()
         self._sys_q: queue.Queue = queue.Queue()
         self._stop_event = threading.Event()
@@ -46,7 +53,7 @@ class AudioRecorder:
             channels=CHANNELS,
             dtype=DTYPE,
             blocksize=BLOCK_SIZE,
-            callback=lambda d, f, t, s: self._mic_q.put(d.copy()),
+            callback=self._mic_callback,
         )
         self._sys_stream = sd.InputStream(
             device=self.system_device,
@@ -87,6 +94,14 @@ class AudioRecorder:
             return 0.0
         return time.time() - self._start_time
 
+    def _mic_callback(self, data, frames, time_info, status) -> None:
+        """Gate mic frames: replace with silence if RMS is below threshold."""
+        rms = np.sqrt(np.mean(data.astype(np.float32) ** 2))
+        if rms >= self._mic_threshold:
+            self._mic_q.put(data.copy())
+        else:
+            self._mic_q.put(np.zeros_like(data))
+
     def _write_loop(self, q: queue.Queue, path: Path) -> None:
         try:
             with sf.SoundFile(
@@ -100,3 +115,4 @@ class AudioRecorder:
                         continue
         except Exception as e:
             self._write_error = str(e)
+

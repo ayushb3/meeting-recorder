@@ -73,15 +73,32 @@ def check_status(model: str, host: str, timeout: float = 2.0) -> OllamaStatus:
 
 
 PROMPT_TEMPLATE = """\
-Given this meeting transcript, produce:
-1. A 2-3 sentence TL;DR
-2. Topics covered
-3. Key decisions made
-4. Action items (person + task + deadline if mentioned)
+You are a meeting notes assistant. Analyze the transcript below and produce structured notes.
 
-Use markdown headings (## TL;DR, ## Topics Covered, ## Key Decisions, ## Action Items).
-Format action items as: - Person — task by deadline
+Rules:
+- Be specific and concrete — extract actual decisions, not vague descriptions
+- For action items, only list things explicitly assigned or volunteered; do not infer
+- If the transcript labels some lines as "(you)", that speaker is the note-taker
+- Ignore filler words, repeated lines, and cross-talk artifacts
 {context_block}
+Produce exactly these sections in order:
+
+## TL;DR
+2-3 sentences. What was this meeting actually about and what was resolved?
+
+## Topics Covered
+Bullet list of distinct topics discussed.
+
+## Key Decisions
+Bullet list of decisions made. If none, write "None recorded."
+
+## Action Items
+For each action item: - **Person** — what they will do (deadline if stated)
+If no action items were stated, write "None recorded."
+
+## Open Questions
+Any unresolved questions or topics explicitly flagged for follow-up.
+
 Transcript:
 {transcript}
 """

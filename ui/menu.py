@@ -107,6 +107,7 @@ class MeetingRecorderApp(rumps.App):
             system_device=self.config.system_device,
             output_dir=self._tmp_dir,
             session_name=session_name,
+            mic_threshold=self.config.mic_threshold,
         )
         self._recorder.start()
         self._record_item.title = "Stop Recording"

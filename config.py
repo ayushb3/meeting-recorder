@@ -61,6 +61,7 @@ class Config:
     keep_audio: bool
     min_recording_seconds: int
     low_disk_threshold_mb: int
+    mic_threshold: int = 300
 
 
 def load_config(path: Path) -> Config:
@@ -80,6 +81,7 @@ def load_config(path: Path) -> Config:
         keep_audio=raw["processing"]["keep_audio"],
         min_recording_seconds=raw["processing"]["min_recording_seconds"],
         low_disk_threshold_mb=raw["processing"]["low_disk_threshold_mb"],
+        mic_threshold=raw["processing"].get("mic_threshold", 300),
     )
 
     if not cfg.whisper_binary.exists():
