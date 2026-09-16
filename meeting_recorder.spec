@@ -94,6 +94,7 @@ app = BUNDLE(
         'CFBundleShortVersionString': '1.0.0',
         'LSUIElement': True,
         'NSMicrophoneUsageDescription': 'Meeting Recorder needs microphone access to record meetings.',
+        'NSAudioCaptureUsageDescription': 'Meeting Recorder captures system audio to record meetings.',
         'NSAppleEventsUsageDescription': 'Meeting Recorder uses Apple Events for notifications.',
         'NSHighResolutionCapable': True,
     },
