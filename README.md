@@ -2,12 +2,14 @@
 
 A macOS menu bar app that records meetings (mic + system audio), transcribes with whisper.cpp, summarizes with a local LLM (Ollama), and writes structured notes into your Obsidian vault. Everything runs on-device — no cloud, no subscriptions.
 
+System audio is captured with a **Core Audio process tap**, so there is no audio driver to install and nothing to configure. It works whatever you are listening on, Bluetooth earbuds included.
+
 ## How it works
 
 ```
 Mic ─────────────────────────────────────────────┐
                                                   ▼
-System Audio (BlackHole) ──────────────► Two-pass transcription
+System audio (Core Audio tap) ─────────► Two-pass transcription
                                                   │
                                           whisper.cpp (local)
                                                   │
@@ -24,18 +26,28 @@ After you click **Stop Recording**, a modal lets you name the meeting and add co
 
 ## Prerequisites
 
-### 1. BlackHole 2ch — capture system audio
+### 1. System audio — nothing to install
 
-Download and install from [existential.audio/blackhole](https://existential.audio/blackhole/).
+On **macOS 14.2 or newer** the app captures system audio with a Core Audio process tap. There is no driver to install, no Multi-Output Device to build, and no need to change your output before a meeting. Volume keys keep working, and your listening device — speakers, wired headphones, Bluetooth earbuds — makes no difference, because the tap reads the audio before it reaches any of them.
 
-Then set up a Multi-Output Device so Teams/browser audio goes to both your speakers and BlackHole:
+macOS will ask for audio-recording permission the first time you record. Grant it once.
 
-1. Open **Audio MIDI Setup** (Applications → Utilities)
-2. Click **+** → **Create Multi-Output Device**
-3. Check **BlackHole 2ch** and your speakers/headphones
-4. Right-click the new device → **Use This Device for Sound Output**
+<details>
+<summary>On macOS older than 14.2 (legacy BlackHole setup)</summary>
 
-> **Volume note:** When using the Multi-Output Device, macOS volume keys won't work directly. To adjust volume during a meeting: temporarily switch System Audio output back to your speakers/headphones, adjust, then switch back to the Multi-Output Device. Alternatively, use the volume control on your physical speakers or headphones if available.
+The tap is unavailable, so the app falls back to a loopback device and tells you it has done so. That path needs setup:
+
+1. Install BlackHole from [existential.audio/blackhole](https://existential.audio/blackhole/)
+2. Open **Audio MIDI Setup** (Applications → Utilities)
+3. Click **+** → **Create Multi-Output Device**
+4. Check **BlackHole 2ch** and your speakers/headphones
+5. Right-click the new device → **Use This Device for Sound Output**
+
+All members of a Multi-Output Device must share a sample rate. Bluetooth earbuds commonly run at 44100 while BlackHole defaults to 48000; when they disagree macOS drops the mismatched device without warning, so you hear nothing. Match the rates in Audio MIDI Setup, or use wired output.
+
+With a Multi-Output Device selected the macOS volume keys do not work. Adjust volume on the hardware itself, or switch output temporarily.
+
+</details>
 
 ### 2. whisper.cpp — local transcription
 
@@ -97,6 +109,8 @@ python3 -m venv .venv
 .venv/bin/python app.py
 ```
 
+> **System audio will be silent this way.** macOS grants audio capture to an app bundle launched through LaunchServices — Finder, the Dock, or `open`. A process started from a shell inherits the terminal's privacy context and is refused, and the refusal is silent: the recording succeeds and the system track contains nothing but zeroes. Use this mode for menu and pipeline work, and build the bundle to test recording.
+
 ---
 
 ## Configuration
@@ -107,15 +121,16 @@ On first launch the app copies a template to:
 ~/Library/Application Support/MeetingRecorder/config.toml
 ```
 
-Edit that file — **Preferences** in the menu bar opens it directly.
+**Settings…** in the menu bar opens a window with a folder picker and device dropdowns. It writes the same file, so you can edit it by hand instead if you prefer.
 
 ```toml
 [paths]
 output_dir = "~/Documents/Obsidian/Meetings"   # where notes are saved
 
 [audio]
-system_device = "BlackHole 2ch"
-mic_device = "MacBook Pro Microphone"          # run: python3 -c "import sounddevice; print(sounddevice.query_devices())"
+capture_method = "auto"        # "auto" | "tap" | "blackhole" — see below
+system_device  = "BlackHole 2ch"   # only used by the "blackhole" path
+mic_device     = "MacBook Pro Microphone"   # run: python3 -c "import sounddevice; print(sounddevice.query_devices())"
 
 [whisper]
 binary = "/opt/homebrew/bin/whisper-cli"
@@ -124,33 +139,72 @@ model  = "/opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v3
 [ollama]
 model = "llama3.1:8b"
 host  = "http://localhost:11434"
+# prompt = "..."   # optional: replace the built-in summary prompt.
+                   # Must contain {transcript}; may contain {context}.
 
 [processing]
 keep_audio             = true   # keep .wav files alongside notes
 min_recording_seconds  = 30     # discard accidental short recordings
 low_disk_threshold_mb  = 500    # auto-stop if disk is low
+mic_threshold          = 300    # mic RMS gate (0–32767), suppresses speaker bleed
 ```
+
+### capture_method
+
+| Value | Behaviour |
+|---|---|
+| `auto` (default) | Use the tap when the system supports it, otherwise the loopback device. Falling back is announced, never silent. |
+| `tap` | Require the tap. Fails rather than falling back — useful when diagnosing. |
+| `blackhole` | Always use the loopback device named in `system_device`. |
 
 ---
 
 ## Usage
 
-1. Start Ollama: `ollama serve`
-2. Launch **Meeting Recorder** from the menu bar
+1. Start Ollama: `ollama serve` (or use **Ollama ▸ Start Ollama in Terminal**)
+2. Launch **Meeting Recorder** — it lives in the menu bar, with no Dock icon
 3. Click **Start Recording** before your meeting starts
 4. Click **Stop Recording** when done
 5. A modal appears — enter a meeting name and optional context for the AI summary
-6. Wait for the notification: "Note saved — *Your Meeting Title*"
+6. Wait for the notification: "Note saved — *Your Meeting Title*". Click it to open the note
 
-### Menu items
+Recording never waits on Ollama. If the summary model is unreachable the transcript is still captured and written; the note is marked and can be reprocessed later.
 
-| Item | When available |
+### The menu
+
+```
+● Start Recording              ■ Stop Recording — 12:34 while recording
+────────
+Meetings ▸        Today — Wed 16 Sep
+                  09:00  Standup
+                  11:00  FDE Roadshow
+                  15:00  ⚠ 15:00  Product Review     ← summary failed, retry inside
+                  ────────
+                  Earlier this week
+                  Mon    Design Review
+                  ────────
+                  ~/Documents/Obsidian/Meetings
+                  Open Meetings Folder
+                  Change Location…
+🟢 Ollama ▸       🟢 Running
+                  llama3.1:8b · localhost:11434
+                  ────────
+                  Start Ollama in Terminal
+                  Pull Model…
+                  Re-check Now
+────────
+Settings…
+Quit
+```
+
+The root menu is a fixed size — meetings live in the submenu, so it does not grow with the number of meetings in a day.
+
+| Item | Notes |
 |---|---|
-| Start / Stop Recording | Always |
-| Set Meeting Name… | While recording (pre-names the folder) |
-| Reprocess Last Meeting | Only when a `.error` file exists |
-| Open Today's Note | Always (shows notification if none found) |
-| Preferences | Opens config file in default editor |
+| Start / Stop Recording | Shows elapsed time while recording, then *Processing…* until the note is written |
+| Meetings ▸ | Recent notes grouped by day. Click one to open it. A ⚠ entry has a **Retry summary** child |
+| 🟢 Ollama ▸ | Colour shows server state at a glance: 🟢 ready, 🟡 running but model not pulled, 🔴 unreachable |
+| Settings… | Folder picker, audio device dropdowns, and the rest of the config |
 
 ---
 
@@ -226,7 +280,16 @@ To verify it's running: `curl http://localhost:11434` should return `Ollama is r
 
 ## Error recovery
 
-If the pipeline fails (whisper crash, Ollama down, disk full), a `.error` file is written next to the audio files. Audio is always preserved. Use **Reprocess Last Meeting** from the menu to retry — it re-runs the full pipeline on the saved audio.
+Audio is always preserved. If a stage fails — whisper crash, Ollama down, disk full — a `.error` file is written beside the audio and the session is marked in **Meetings ▸** with a ⚠. Open it and choose **Retry summary** to re-run the pipeline on the saved audio.
+
+An Ollama outage is a partial failure rather than a total one: the transcript is still written, and only the summary is missing, so the note is useful immediately and improves when you retry.
+
+### "No system audio captured"
+
+Both capture paths fail by producing silence rather than an error, so the app checks the recorded system track and warns when it is empty. If you see this:
+
+- **Using the tap** — grant audio recording permission in System Settings → Privacy & Security → Microphone, then record again. Note that a terminal-launched `python app.py` is always refused; see Option B above.
+- **Using BlackHole** — your output is not routed through the loopback device. Check the Multi-Output Device is selected and its members share a sample rate.
 
 ---
 
@@ -247,8 +310,15 @@ If the pipeline fails (whisper crash, Ollama down, disk full), a `.error` file i
 | Component | Library |
 |---|---|
 | Menu bar UI | `rumps` |
-| Audio capture | `sounddevice` + `soundfile` |
+| Settings window | PyObjC / AppKit |
+| System audio | Core Audio process tap (PyObjC + ctypes) |
+| Mic capture | `sounddevice` + `soundfile` |
 | Transcription | `whisper.cpp` (subprocess) |
 | Summarization | Ollama local HTTP API |
 | Config | `tomllib` (stdlib) |
 | Bundling | PyInstaller 6.x |
+
+## Requirements
+
+- macOS 14.2+ for driverless system audio capture; older versions fall back to BlackHole
+- The app must be launched as a bundle (Finder, Dock, or `open`) for system audio capture to be permitted
