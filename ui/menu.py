@@ -12,6 +12,15 @@ from pathlib import Path
 
 import rumps
 
+# PyObjCTools.AppHelper.callAfter is the correct primitive for marshalling a
+# callable onto the main thread's runloop from a background thread.
+# Guard the import so tests (which run outside the .app bundle on any OS) can
+# still import this module without exploding.
+try:
+    from PyObjCTools import AppHelper as _AppHelper
+except ImportError:  # non-macOS or stripped test environment
+    _AppHelper = None
+
 from config import Config
 from pipeline.processor import run_pipeline
 from recorder.audio import AudioRecorder
@@ -192,9 +201,8 @@ class MeetingRecorderApp(rumps.App):
         self._ollama_recheck_item = rumps.MenuItem("Re-check Now", callback=self.recheck_ollama)
         self._ollama_menu = rumps.MenuItem("Ollama")
 
-        # ---- Save Location submenu ----
+        # ---- Location items (shown at bottom of Meetings submenu) ----
         self._location_caption = rumps.MenuItem("", callback=None)
-        self._save_location_menu = rumps.MenuItem("Save Location")
 
         # ---- Top-level Settings / Quit ----
         self._settings_item = rumps.MenuItem("Settings…", callback=self.open_prefs)
@@ -226,14 +234,6 @@ class MeetingRecorderApp(rumps.App):
             self._ollama_recheck_item,
         ])
 
-        self._location_caption.title = self._short_location()
-        self._save_location_menu.update([
-            self._location_caption,
-            None,
-            rumps.MenuItem("Open Meetings Folder", callback=self.open_output_dir),
-            rumps.MenuItem("Change Location…", callback=self.open_prefs),
-        ])
-
     def _build_top_menu(self):
         """Set the root menu — fixed size, never grows with meeting count."""
         self.menu = [
@@ -241,7 +241,6 @@ class MeetingRecorderApp(rumps.App):
             None,
             self._meetings_menu,
             self._ollama_menu,
-            self._save_location_menu,
             None,
             self._settings_item,
             self._quit_item,
@@ -270,7 +269,10 @@ class MeetingRecorderApp(rumps.App):
 
     def _set_recording(self):
         self.icon = ICON_RECORDING
-        # Hero item label is driven by _update_timer
+        # Set the label synchronously (we are already on the main thread — this
+        # is called directly from _start_recording which is a menu callback).
+        # _update_timer will keep it updated every second thereafter.
+        self._record_item.title = "■ Stop Recording — 00:00"
 
     # ---------------------------------------------------------------- notification helper (B4)
 
@@ -297,11 +299,19 @@ class MeetingRecorderApp(rumps.App):
     # ---------------------------------------------------------------- marshal helpers
 
     def _call_on_main(self, fn, *args, **kwargs):
-        """Schedule *fn* to run on the main thread via a one-shot rumps.Timer."""
-        def _cb(timer):
-            timer.stop()
+        """Schedule *fn* to run on the main thread's runloop.
+
+        Uses PyObjCTools.AppHelper.callAfter when available (macOS .app bundle),
+        which reliably dispatches to the main runloop from any background thread.
+        Falls back to a direct call (used in test / non-macOS environments).
+        """
+        if _AppHelper is not None:
+            if kwargs:
+                _AppHelper.callAfter(lambda: fn(*args, **kwargs))
+            else:
+                _AppHelper.callAfter(fn, *args)
+        else:
             fn(*args, **kwargs)
-        rumps.Timer(_cb, 0.05).start()
 
     # ---------------------------------------------------------------- recording toggle
 
@@ -583,8 +593,12 @@ class MeetingRecorderApp(rumps.App):
             for d in error_only_dirs:
                 items.append(self._make_error_dir_item(d))
 
+        # Location footer — always at the bottom of the Meetings submenu
+        self._location_caption.title = self._short_location()
         items.append(None)
-        items.append(rumps.MenuItem("Browse All Meetings…", callback=self.open_output_dir))
+        items.append(self._location_caption)
+        items.append(rumps.MenuItem("Open Meetings Folder", callback=self.open_output_dir))
+        items.append(rumps.MenuItem("Change Location…", callback=self.open_prefs))
 
         # clear() calls NSMenu.removeAllItems() which requires _menu to be non-None.
         # A MenuItem with no prior children has _menu=None, so guard the clear.
