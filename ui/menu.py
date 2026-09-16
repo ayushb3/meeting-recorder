@@ -586,7 +586,11 @@ class MeetingRecorderApp(rumps.App):
         items.append(None)
         items.append(rumps.MenuItem("Browse All Meetings…", callback=self.open_output_dir))
 
-        self._meetings_menu.clear()
+        # clear() calls NSMenu.removeAllItems() which requires _menu to be non-None.
+        # A MenuItem with no prior children has _menu=None, so guard the clear.
+        # update() allocates _menu as needed — safe to call unconditionally.
+        if getattr(self._meetings_menu, '_menu', None) is not None:
+            self._meetings_menu.clear()
         self._meetings_menu.update(items)
 
     def _make_note_item(self, entry: dict) -> rumps.MenuItem:
