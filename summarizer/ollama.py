@@ -96,6 +96,9 @@ Bullet list of decisions made. If none, write "None recorded."
 For each action item: - **Person** — what they will do (deadline if stated)
 If no action items were stated, write "None recorded."
 
+## Notable Quotes
+2-3 verbatim quotes that are memorable, surprising, or capture something important. Use blockquote format (> "..."). If nothing stands out, omit this section.
+
 ## Open Questions
 Any unresolved questions or topics explicitly flagged for follow-up.
 
