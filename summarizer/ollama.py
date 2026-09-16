@@ -122,11 +122,35 @@ Summary:
 """
 
 
-def summarize(transcript_lines: list[str], model: str, host: str, context: str | None = None) -> str:
-    """Send transcript to Ollama and return the summary text."""
+def summarize(
+    transcript_lines: list[str],
+    model: str,
+    host: str,
+    context: str | None = None,
+    custom_template: str | None = None,
+) -> str:
+    """Send transcript to Ollama and return the summary text.
+
+    If *custom_template* is provided it overrides the built-in PROMPT_TEMPLATE.
+    Custom templates are interpolated with str.replace() so that literal braces
+    (e.g. JSON examples in the prompt) never cause KeyError.  The built-in
+    template continues to use .format() as before.
+
+    Supported placeholders in custom_template:
+        {transcript}  — the full transcript text (required)
+        {context}     — the organizer context string, or empty string if absent
+    """
     transcript = "\n".join(transcript_lines)
-    context_block = CONTEXT_BLOCK.format(context=context) if context else ""
-    prompt = PROMPT_TEMPLATE.format(transcript=transcript, context_block=context_block)
+    if custom_template is not None:
+        context_str = context if context else ""
+        prompt = (
+            custom_template
+            .replace("{transcript}", transcript)
+            .replace("{context}", context_str)
+        )
+    else:
+        context_block = CONTEXT_BLOCK.format(context=context) if context else ""
+        prompt = PROMPT_TEMPLATE.format(transcript=transcript, context_block=context_block)
     try:
         response = requests.post(
             f"{host}/api/generate",

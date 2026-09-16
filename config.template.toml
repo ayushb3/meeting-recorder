@@ -17,6 +17,20 @@ binary = "/opt/homebrew/bin/whisper-cli"
 # Install: brew install ollama && ollama pull llama3.1:8b
 model = "llama3.1:8b"
 host = "http://localhost:11434"
+# Optional: override the built-in summarization prompt.
+# Must contain {transcript} (where the transcript is inserted).
+# May also contain {context} (the organizer context string). Unlike the built-in
+# template which omits the context section entirely when no context is provided,
+# a custom template that includes {context} will have it replaced with an empty
+# string when absent — so wrap it in a conditional label only if you always supply
+# context, or omit {context} from your template if you don't use that feature.
+# Literal curly braces used as JSON examples are fine — they are handled safely.
+# Example:
+# prompt = """
+# Summarize this meeting transcript in bullet points.
+#
+# {transcript}
+# """
 
 [processing]
 keep_audio = true

@@ -232,18 +232,28 @@ class MeetingRecorderApp(rumps.App):
                 ollama_model=self.config.ollama_model,
                 ollama_host=self.config.ollama_host,
                 keep_audio=self.config.keep_audio,
+                ollama_prompt=self.config.ollama_prompt,
             )
             if result.success:
-                if error_file:
+                # Only remove the error marker when the summary actually succeeded;
+                # a degraded reprocess must leave the marker so reprocess stays enabled.
+                if error_file and result.summary_ok:
                     error_file.unlink(missing_ok=True)
-                self.title = ""
+                self.title = "" if result.summary_ok else "⚠"
                 self._set_idle()
                 log.info("Pipeline complete: %s", result.note_path)
-                rumps.notification(
-                    "Meeting Recorder",
-                    "Note saved",
-                    result.meeting_name or (result.session_dir.name if result.session_dir else "Done"),
-                )
+                if result.summary_ok:
+                    rumps.notification(
+                        "Meeting Recorder",
+                        "Note saved",
+                        result.meeting_name or (result.session_dir.name if result.session_dir else "Done"),
+                    )
+                else:
+                    rumps.notification(
+                        "Meeting Recorder",
+                        "Note saved (summary unavailable)",
+                        result.warning or "Ollama was not reachable. Use Reprocess to retry.",
+                    )
             else:
                 self.title = "⚠ Error"
                 rumps.notification(

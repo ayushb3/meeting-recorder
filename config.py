@@ -62,6 +62,7 @@ class Config:
     min_recording_seconds: int
     low_disk_threshold_mb: int
     mic_threshold: int = 300
+    ollama_prompt: str | None = None
 
 
 def load_config(path: Path) -> Config:
@@ -82,7 +83,14 @@ def load_config(path: Path) -> Config:
         min_recording_seconds=raw["processing"]["min_recording_seconds"],
         low_disk_threshold_mb=raw["processing"]["low_disk_threshold_mb"],
         mic_threshold=raw["processing"].get("mic_threshold", 300),
+        ollama_prompt=raw.get("ollama", {}).get("prompt", None),
     )
+
+    if cfg.ollama_prompt is not None and "{transcript}" not in cfg.ollama_prompt:
+        raise ValueError(
+            "[ollama] prompt must contain {transcript} but it was not found.\n"
+            "Add {transcript} where you want the meeting transcript inserted."
+        )
 
     if not cfg.whisper_binary.exists():
         raise ValueError(

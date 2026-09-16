@@ -23,6 +23,8 @@ class PipelineResult:
     meeting_name: str | None = None
     error_stage: str | None = None
     error_message: str | None = None
+    summary_ok: bool = True
+    warning: str | None = None
 
 
 def _slugify(name: str) -> str:
@@ -42,6 +44,7 @@ def run_pipeline(
     keep_audio: bool,
     meeting_name: str | None = None,
     llm_context: str | None = None,
+    ollama_prompt: str | None = None,
 ) -> PipelineResult:
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
@@ -83,9 +86,14 @@ def run_pipeline(
         return write_error("transcribe", str(e))
 
     # Summarize (non-fatal if Ollama down)
+    _ollama_unavailable = False
+    _ollama_warning: str | None = None
     try:
         log.info("Summarizing with Ollama: model=%s", ollama_model)
-        summary = summarize(transcript_lines, ollama_model, ollama_host, context=llm_context)
+        summary = summarize(
+            transcript_lines, ollama_model, ollama_host,
+            context=llm_context, custom_template=ollama_prompt,
+        )
         log.info("Summary done (%d chars)", len(summary))
 
         # If no user-supplied name, ask the LLM to suggest one from the summary
@@ -96,18 +104,57 @@ def run_pipeline(
     except OllamaUnavailableError as e:
         log.warning("Ollama unavailable: %s — saving note without summary", e)
         summary = "⚠ Summary unavailable — Ollama was not reachable during processing."
+        _ollama_unavailable = True
+        _ollama_warning = f"Ollama unavailable: {e}. Summary was not generated."
 
-    # Rename session dir now that we have a final name
+    # Rename session dir now that we have a final name (B6: atomic slug reservation).
+    # We must never overwrite an existing dir, including empty ones — POSIX rename(2)
+    # silently replaces an empty target directory. We atomically claim the name by
+    # mkdir(exist_ok=False); the first candidate that succeeds is ours, then we move
+    # the contents of session_dir into it and remove the now-empty source dir.
     if meeting_name:
         slug = _slugify(meeting_name)
-        named_dir = week_dir / slug
+        time_hm = session_dt.strftime("-%Hh%M")
+        time_hms = session_dt.strftime("-%Hh%Mm%S")
+        candidates = [slug, slug + time_hm, slug + time_hms] + [
+            f"{slug}{time_hms}-{n}" for n in range(2, 10)
+        ]
+        reserved: Path | None = None
+        for candidate in candidates:
+            try:
+                candidate_path = week_dir / candidate
+                candidate_path.mkdir(parents=False, exist_ok=False)
+                reserved = candidate_path
+                log.info("Reserved session dir: %s", reserved.name)
+                break
+            except FileExistsError:
+                log.info("Slug candidate taken: %s — trying next", candidate)
+        if reserved is not None:
+            try:
+                # Move contents of session_dir into the reserved dir, then remove source
+                for item in session_dir.iterdir():
+                    shutil.move(str(item), reserved)
+                session_dir.rmdir()
+                session_dir = reserved
+                log.info("Session dir moved to: %s", session_dir.name)
+            except Exception as e:
+                log.warning("Could not move session dir contents: %s", e)
+                # Leave session_dir as-is; remove the empty reservation to avoid orphans
+                try:
+                    reserved.rmdir()
+                except Exception:
+                    pass
+
+    # Write a summarize.error marker when Ollama was unavailable (B2).
+    # Must happen AFTER the rename so the marker lands in the final dir.
+    # Wrapped so a filesystem error (ENOSPC, read-only) never kills the note write.
+    if _ollama_unavailable:
+        marker = session_dir / "summarize.error"
         try:
-            session_dir.rename(named_dir)
-            session_dir = named_dir
-            log.info("Session dir renamed to: %s", session_dir.name)
+            marker.write_text(f"stage: summarize\nerror: {_ollama_warning}\n")
+            log.info("Degraded marker written: %s", marker)
         except Exception as e:
-            log.warning("Could not rename session dir: %s", e)
-            # Keep the timestamp dir, update dest paths below
+            log.warning("Could not write degraded marker %s: %s", marker, e)
     dest_mic = session_dir / "audio-mic.wav"
     dest_sys = session_dir / "audio-system.wav"
     try:
@@ -132,4 +179,11 @@ def run_pipeline(
         dest_mic.unlink(missing_ok=True)
         dest_sys.unlink(missing_ok=True)
 
-    return PipelineResult(success=True, note_path=note_path, session_dir=session_dir, meeting_name=meeting_name)
+    return PipelineResult(
+        success=True,
+        note_path=note_path,
+        session_dir=session_dir,
+        meeting_name=meeting_name,
+        summary_ok=not _ollama_unavailable,
+        warning=_ollama_warning,
+    )

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -83,6 +83,54 @@ def _frontmatter(note_path: Path) -> dict[str, str]:
         if sep:
             fields[key.strip()] = value.strip()
     return fields
+
+
+def list_notes(output_dir: Path, weeks: int = 2) -> list[dict]:
+    """Return note entries for the last *weeks* ISO week folders, newest day first.
+
+    Within a day, entries are sorted oldest time first so items appear in meeting order.
+    Each entry is a dict with keys:
+        date     (str, %Y-%m-%d)
+        time     (str, %H:%M)
+        title    (str)
+        path     (Path)
+        degraded (bool) — True when any *.error file sits beside the note
+    Missing week dirs are silently skipped. Notes with incomplete frontmatter
+    fall back to empty strings rather than raising.
+    """
+    today = datetime.today()
+    # Collect all matching notes across the requested week range
+    raw: list[tuple[str, str, dict]] = []  # (date_str, time_str, entry)
+    for offset in range(weeks):
+        week_dt = today - timedelta(weeks=offset)
+        wdir = output_dir / week_folder(week_dt)
+        if not wdir.exists():
+            continue
+        for note in wdir.glob("*/meeting.md"):
+            fields = _frontmatter(note)
+            date_str = fields.get("date", "")
+            time_str = fields.get("time", "")
+            title = fields.get("title", "")
+            degraded = any(note.parent.glob("*.error"))
+            entry = {
+                "date": date_str,
+                "time": time_str,
+                "title": title,
+                "path": note,
+                "degraded": degraded,
+            }
+            raw.append((date_str, time_str, entry))
+
+    # Newest date first; within the same date oldest time first.
+    # Build a per-date index, then emit dates in reverse order.
+    by_date: dict[str, list[tuple[str, str, dict]]] = {}
+    for item in raw:
+        by_date.setdefault(item[0], []).append(item)
+    grouped: list[tuple[str, str, dict]] = []
+    for date_key in sorted(by_date.keys(), reverse=True):
+        grouped.extend(sorted(by_date[date_key], key=lambda t: t[1]))
+
+    return [item[2] for item in grouped]
 
 
 def find_notes_for_date(output_dir: Path, dt: datetime) -> list[Path]:
