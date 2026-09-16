@@ -159,9 +159,14 @@ def resolve_session_dt(session_dir: Path) -> datetime:
 
 @rumps.notifications
 def notification_handler(info):
-    """Handle notification clicks — open the note path stored in ``data``."""
+    """Handle notification clicks — open the note path stored in ``data``.
+
+    ``info`` is a rumps.Notification (a Mapping wrapping the data dict), not a
+    plain dict, so isinstance(info, dict) must NOT be used as a guard.
+    """
     try:
-        path = info.get("note_path") if isinstance(info, dict) else None
+        # info is a rumps.Notification which implements Mapping; .get() works.
+        path = info.get("note_path") if info is not None else None
         if path:
             subprocess.Popen(["open", str(path)])
     except Exception:
@@ -266,6 +271,12 @@ class MeetingRecorderApp(rumps.App):
         self.icon = ICON_IDLE
         self._record_item.title = "● Start Recording"
         self._record_item.set_callback(self.toggle_recording)
+
+    def _set_processing(self):
+        """Disable the hero item while the pipeline runs (main thread only)."""
+        self.title = "Processing..."
+        self._record_item.title = "Processing…"
+        self._record_item.set_callback(None)
 
     def _set_recording(self):
         self.icon = ICON_RECORDING
@@ -422,7 +433,7 @@ class MeetingRecorderApp(rumps.App):
         ctx_resp = ctx_win.run()
         llm_context = ctx_resp.text.strip() if ctx_resp.clicked and ctx_resp.text.strip() else None
 
-        self.title = "Processing..."
+        self._set_processing()
         log.info("Dispatching pipeline: duration=%ds name=%s context=%s", duration, meeting_name, llm_context)
         threading.Thread(
             target=self._run_pipeline,
@@ -467,8 +478,9 @@ class MeetingRecorderApp(rumps.App):
                 note_path_str = str(result.note_path) if result.note_path else None
 
                 def _ui_success():
-                    self.title = "" if result.summary_ok else "⚠"
                     self._set_idle()
+                    if not result.summary_ok:
+                        self.title = "⚠"
                     self._rebuild_meetings_menu()
                     if result.summary_ok:
                         self._notify(
@@ -485,8 +497,8 @@ class MeetingRecorderApp(rumps.App):
                 log.info("Pipeline complete: %s", result.note_path)
             else:
                 def _ui_failure():
-                    self.title = "⚠ Error"
                     self._set_idle()  # B3: re-enable reprocess immediately
+                    self.title = "⚠ Error"
                     self._rebuild_meetings_menu()
                     self._notify(
                         "Meeting Recorder", "Processing failed",
@@ -496,9 +508,9 @@ class MeetingRecorderApp(rumps.App):
         except Exception as e:
             log.exception("Unexpected pipeline error")
             def _ui_error():
+                self._set_idle()  # B3
                 self.title = "⚠ Error"
                 self._notify("Meeting Recorder", "Unexpected error", str(e))
-                self._set_idle()  # B3
                 self._rebuild_meetings_menu()
             self._call_on_main(_ui_error)
         finally:
@@ -550,13 +562,13 @@ class MeetingRecorderApp(rumps.App):
     def _update_ollama_ui(self, status: OllamaStatus):
         """Update Ollama submenu. MUST be called on the main thread."""
         if status.ready:
-            self._ollama_status_item.title = "● Running"
+            self._ollama_status_item.title = "🟢 Running"
             self._ollama_detail_item.title = f"{status.model} · {status.host}"
         elif status.reachable:
-            self._ollama_status_item.title = "⚠ Running — model not pulled"
+            self._ollama_status_item.title = "🟡 Running — model not pulled"
             self._ollama_detail_item.title = f"{status.model} not found at {status.host}"
         else:
-            self._ollama_status_item.title = "○ Not running"
+            self._ollama_status_item.title = "🔴 Not running"
             self._ollama_detail_item.title = f"No server at {status.host}"
 
     # ---------------------------------------------------------------- meetings submenu
@@ -699,7 +711,7 @@ class MeetingRecorderApp(rumps.App):
         sys_path = session_dir / "audio-system.wav"
         dt = resolve_session_dt(session_dir)
 
-        self._call_on_main(lambda: setattr(self, 'title', "Processing..."))
+        self._call_on_main(self._set_processing)
         threading.Thread(
             target=self._run_pipeline,
             args=(mic_path, sys_path, dt, 0, None, None, error_file, None),
@@ -720,6 +732,7 @@ class MeetingRecorderApp(rumps.App):
         """Open Terminal running 'ollama serve' (issue #9: Popen, not run)."""
         script = 'tell application "Terminal" to do script "ollama serve"'
         subprocess.Popen(["osascript", "-e", script])
+        self._schedule_ollama_probes([2, 5, 10, 20])
 
     def pull_model(self, _):
         """Open Terminal running 'ollama pull <model>' (issues #8, #9)."""
@@ -731,10 +744,23 @@ class MeetingRecorderApp(rumps.App):
             return
         script = f'tell application "Terminal" to do script "ollama pull {model}"'
         subprocess.Popen(["osascript", "-e", script])
+        self._schedule_ollama_probes([5, 15, 30, 60])
 
     def recheck_ollama(self, _):
         """Re-probe Ollama immediately (async)."""
         threading.Thread(target=self._probe_ollama_and_refresh_ui, daemon=True).start()
+
+    def _schedule_ollama_probes(self, delays_seconds: list[int]):
+        """Schedule background Ollama probes at the given delays (seconds after now).
+
+        Uses threading.Timer so the probes run off the main thread and UI updates
+        are marshalled back through _call_on_main / AppHelper.callAfter.
+        """
+        for delay in delays_seconds:
+            threading.Timer(
+                delay,
+                self._probe_ollama_and_refresh_ui,
+            ).start()
 
 
 # ---------------------------------------------------------------------------
