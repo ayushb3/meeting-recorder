@@ -614,7 +614,7 @@ class MeetingRecorderApp(rumps.App):
         items.append(None)
         items.append(self._location_caption)
         items.append(rumps.MenuItem("Open Meetings Folder", callback=self.open_output_dir))
-        items.append(rumps.MenuItem("Change Location…", callback=self.open_prefs))
+        items.append(rumps.MenuItem("Change Location…", callback=lambda _: self.open_prefs(_, focus_output_dir=True)))
 
         # clear() calls NSMenu.removeAllItems() which requires _menu to be non-None.
         # A MenuItem with no prior children has _menu=None, so guard the clear.
@@ -727,10 +727,9 @@ class MeetingRecorderApp(rumps.App):
     def open_output_dir(self, _=None):
         subprocess.Popen(["open", str(self.config.output_dir)])
 
-    def open_prefs(self, _):
-        from config import USER_CONFIG_PATH, ensure_user_config
-        ensure_user_config()
-        subprocess.Popen(["open", str(USER_CONFIG_PATH)])
+    def open_prefs(self, _, focus_output_dir: bool = False):
+        from ui.settings_window import open_settings_window
+        open_settings_window(self, focus_output_dir=focus_output_dir)
 
     def start_ollama(self, _):
         """Open Terminal running 'ollama serve' (issue #9: Popen, not run)."""

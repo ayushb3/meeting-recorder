@@ -38,6 +38,7 @@ a = Analysis(
         'pipeline.processor',
         'ui',
         'ui.menu',
+        'ui.settings_window',
         'config',
     ],
     hookspath=[],
