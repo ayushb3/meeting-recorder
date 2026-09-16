@@ -204,7 +204,8 @@ class MeetingRecorderApp(rumps.App):
         self._ollama_start_item = rumps.MenuItem("Start Ollama in Terminal", callback=self.start_ollama)
         self._ollama_pull_item = rumps.MenuItem("Pull Model…", callback=self.pull_model)
         self._ollama_recheck_item = rumps.MenuItem("Re-check Now", callback=self.recheck_ollama)
-        self._ollama_menu = rumps.MenuItem("Ollama")
+        self._ollama_menu = rumps.MenuItem("⚪ Ollama")
+        self._ollama_root_item = self._ollama_menu  # alias for clarity in _update_ollama_ui
 
         # ---- Location items (shown at bottom of Meetings submenu) ----
         self._location_caption = rumps.MenuItem("", callback=None)
@@ -560,14 +561,17 @@ class MeetingRecorderApp(rumps.App):
         threading.Thread(target=self._probe_ollama_and_refresh_ui, daemon=True).start()
 
     def _update_ollama_ui(self, status: OllamaStatus):
-        """Update Ollama submenu. MUST be called on the main thread."""
+        """Update Ollama submenu and root item title. MUST be called on the main thread."""
         if status.ready:
+            self._ollama_root_item.title = "🟢 Ollama"
             self._ollama_status_item.title = "🟢 Running"
             self._ollama_detail_item.title = f"{status.model} · {status.host}"
         elif status.reachable:
+            self._ollama_root_item.title = "🟡 Ollama"
             self._ollama_status_item.title = "🟡 Running — model not pulled"
             self._ollama_detail_item.title = f"{status.model} not found at {status.host}"
         else:
+            self._ollama_root_item.title = "🔴 Ollama"
             self._ollama_status_item.title = "🔴 Not running"
             self._ollama_detail_item.title = f"No server at {status.host}"
 
