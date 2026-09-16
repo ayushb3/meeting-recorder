@@ -1,10 +1,75 @@
 import re
+from dataclasses import dataclass
 
 import requests
 
 
 class OllamaUnavailableError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class OllamaStatus:
+    """Result of a cheap liveness probe against the Ollama server."""
+
+    reachable: bool
+    model_present: bool
+    model: str
+    host: str
+    detail: str
+
+    @property
+    def ready(self) -> bool:
+        """True when the server answers and the configured model is pulled."""
+        return self.reachable and self.model_present
+
+    @property
+    def label(self) -> str:
+        """Short menu-bar label, e.g. 'Ollama: ready (llama3.1:8b)'."""
+        if self.ready:
+            return f"Ollama: ready ({self.model})"
+        if self.reachable:
+            return f"Ollama: model {self.model} not pulled"
+        return "Ollama: not running"
+
+
+def check_status(model: str, host: str, timeout: float = 2.0) -> OllamaStatus:
+    """Probe Ollama without generating anything.
+
+    Never raises: a probe failure is itself the answer. Summaries are optional,
+    so this is only ever used to tell the user what will happen, never to block.
+    """
+    try:
+        response = requests.get(f"{host}/api/tags", timeout=timeout)
+        response.raise_for_status()
+        models = response.json().get("models", [])
+    except (requests.ConnectionError, requests.Timeout):
+        return OllamaStatus(
+            reachable=False, model_present=False, model=model, host=host,
+            detail=f"Cannot reach Ollama at {host}. Start it with: ollama serve",
+        )
+    except Exception as e:  # malformed JSON, HTTP error, anything else
+        return OllamaStatus(
+            reachable=False, model_present=False, model=model, host=host,
+            detail=f"Ollama at {host} responded but the probe failed: {e}",
+        )
+
+    # Ollama reports fully-qualified tags ("llama3.1:8b"); a config that omits
+    # the tag should still match the ":latest" the server reports.
+    names = {m.get("name", "") for m in models}
+    present = (
+        model in names
+        or f"{model}:latest" in names
+        or any(name.split(":")[0] == model for name in names)
+    )
+    detail = (
+        f"{model} is loaded and ready at {host}"
+        if present
+        else f"Ollama is running at {host} but {model} is not pulled. Run: ollama pull {model}"
+    )
+    return OllamaStatus(
+        reachable=True, model_present=present, model=model, host=host, detail=detail,
+    )
 
 
 PROMPT_TEMPLATE = """\

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menu Bar — Variant B</title>
+<style>
+  body { margin: 0; padding: 32px 20px 56px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; background: #1c1c1f; color: #f2f2f7; }
+  h1 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+  .lede { font-size: 13px; color: #a1a1a8; margin: 0 0 28px; max-width: 760px; line-height: 1.5; }
+  .stage { display: flex; gap: 0; align-items: flex-start; flex-wrap: wrap; }
+  .panel { border-radius: 10px; background: #2b2b2e; border: 1px solid rgba(255,255,255,0.09); padding: 7px 0; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
+  .mi { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 7px 14px; background: none; border: 0; border-radius: 5px; font: inherit; font-size: 14px; color: #f2f2f7; text-align: left; cursor: default; }
+  .sel { background: #0a6cff; color: #fff; }
+  .sep { height: 1px; background: rgba(255,255,255,0.14); margin: 6px 12px; }
+  .cap { padding: 5px 14px 3px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #9b9ba1; }
+  .t { width: 44px; flex-shrink: 0; font-size: 12px; color: #9b9ba1; font-variant-numeric: tabular-nums; }
+  .grow { flex-grow: 1; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; display: inline-block; }
+  .note { margin-top: 36px; max-width: 760px; font-size: 13px; line-height: 1.6; color: #c7c7cc; }
+  .note code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  @media (max-width: 860px) { .stage > * { margin: 0 0 20px !important; } }
+</style>
+</head>
+<body>
+
+<h1>Meeting Recorder — menu bar, Variant B</h1>
+<p class="lede">
+  Chosen direction. Root menu stays short with the hero action on top; everything else hangs off submenus,
+  so the menu scales to any number of meetings in a day. Drawn here with two submenus open at once
+  (in reality only one opens at a time). Static mockup — nothing is clickable.
+</p>
+
+<div class="stage">
+
+  <!-- Root menu -->
+  <div class="panel" style="width: 250px; flex-shrink: 0;">
+    <button type="button" class="mi">
+      <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="#ff453a"/></svg>
+      <span style="font-weight:600;">Start Recording</span>
+    </button>
+    <div class="sep"></div>
+    <button type="button" class="mi sel">
+      <span class="grow">Meetings</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+    <button type="button" class="mi">
+      <span class="dot" style="background:#30d158;"></span>
+      <span class="grow">Ollama</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9b9ba1" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+    <button type="button" class="mi">
+      <span class="grow">Save Location</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9b9ba1" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+    <div class="sep"></div>
+    <button type="button" class="mi"><span>Settings…</span></button>
+    <button type="button" class="mi"><span>Quit</span></button>
+  </div>
+
+  <!-- Meetings submenu -->
+  <div class="panel" style="width: 286px; flex-shrink: 0; margin-left: -6px; margin-top: 44px;">
+    <div class="cap">Today — Tue 16 Sep</div>
+    <button type="button" class="mi"><span class="t">09:00</span><span class="grow">Standup</span></button>
+    <button type="button" class="mi"><span class="t">11:00</span><span class="grow">FDE Roadshow</span></button>
+    <button type="button" class="mi"><span class="t">15:00</span><span class="grow">1:1 with Sven</span></button>
+    <div class="sep"></div>
+    <div class="cap">Earlier this week</div>
+    <button type="button" class="mi"><span class="t">Mon</span><span class="grow">Design Review</span></button>
+    <button type="button" class="mi"><span class="t">Mon</span><span class="grow">Vendor Call</span></button>
+    <div class="sep"></div>
+    <button type="button" class="mi">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c7c7cc" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <span>Browse All Meetings…</span>
+    </button>
+  </div>
+
+  <!-- Ollama submenu -->
+  <div class="panel" style="width: 286px; flex-shrink: 0; margin-left: 30px; margin-top: 150px;">
+    <div style="padding: 7px 14px 10px; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="dot" style="background:#30d158;"></span>
+        <span style="font-size:13px; font-weight:600;">Running</span>
+      </div>
+      <div style="font-size:12px; color:#a1a1a8; padding-left:16px; font-variant-numeric: tabular-nums;">llama3.1:8b · localhost:11434</div>
+    </div>
+    <div class="sep"></div>
+    <button type="button" class="mi"><span>Start Ollama in Terminal</span></button>
+    <button type="button" class="mi"><span>Pull Model…</span></button>
+    <button type="button" class="mi"><span>Re-check Now</span></button>
+    <div class="sep"></div>
+    <div class="cap">Model</div>
+    <button type="button" class="mi">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f2f2f7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      <span>llama3.1:8b</span>
+    </button>
+    <button type="button" class="mi"><span style="padding-left:24px;">qwen2.5:14b</span></button>
+  </div>
+
+</div>
+
+<div class="note">
+  <p><strong>What this is showing.</strong> The root menu never grows: a day with twelve meetings still shows
+  four lines. <code>Meetings ▸</code> groups by day and ends in <em>Browse All Meetings…</em>, which opens the
+  output folder in Finder. <code>Ollama ▸</code> carries live status plus the recovery action, so a dead server
+  is both visible and fixable without leaving the menu. The dot beside <code>Ollama</code> in the root menu is
+  the at-a-glance signal; the menu bar icon carries the same dot.</p>
+  <p><strong>Not shown:</strong> the recording state (icon turns red, title becomes a timer, <em>Start</em>
+  becomes <em>Stop</em>), and the degraded state where a meeting transcribed but got no summary — that meeting
+  needs a marker in the list and a <em>Retry summary</em> action. Variant C in the canvas sketched both; borrow
+  from it when wiring the list.</p>
+  <p>Three-variant canvas, including the states above:
+  <a href="https://claude.ai/artifact/XhnSNUFQ6tZ9APsof1xfW5" style="color:#6fb0ff;">claude.ai/artifact/XhnSNUFQ6tZ9APsof1xfW5</a></p>
+</div>
+
+</body>
+</html>
