@@ -3,6 +3,14 @@
 output_dir = "~/Documents/MeetingRecordings"
 
 [audio]
+# How the other side of the meeting is captured.
+#   "auto"      — use the macOS 14.2+ system audio tap, fall back to the loopback device
+#   "tap"       — require the tap; fail rather than fall back
+#   "blackhole" — always use the loopback device named in system_device
+# The tap needs no audio setup and works whatever you are listening on,
+# including Bluetooth. system_device only matters for the "blackhole" path.
+capture_method = "auto"
+
 # Run: python3 -c "import sounddevice; print(sounddevice.query_devices())" to list devices
 system_device = "BlackHole 2ch"
 mic_device = "MacBook Pro Microphone"

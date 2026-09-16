@@ -43,6 +43,10 @@ def _bundle_resource(rel_path: str) -> str:
 ICON_IDLE = _bundle_resource("assets/icon.png")
 ICON_RECORDING = _bundle_resource("assets/icon-recording.png")
 
+# Below this RMS a system track is treated as silent rather than quiet. Real
+# room audio sits orders of magnitude above it; a failed capture is exactly 0.
+_SILENT_TRACK_RMS = 1e-5
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers — no rumps, fully unit-testable
@@ -363,8 +367,19 @@ class MeetingRecorderApp(rumps.App):
             output_dir=tmp_dir,
             session_name=session_name,
             mic_threshold=self.config.mic_threshold,
+            capture_method=self.config.capture_method,
         )
         self._recorder.start()
+        if self._recorder.system_capture_method == "blackhole" and self._recorder.tap_error:
+            # Falling back is fine, but silently recording via the legacy path
+            # would leave the user guessing why setup still matters.
+            log.warning("System audio tap unavailable: %s", self._recorder.tap_error)
+            self._notify(
+                "Meeting Recorder",
+                "Using loopback device",
+                f"System audio tap unavailable ({self._recorder.tap_error}). "
+                f"Recording via {self.config.system_device}.",
+            )
         self._set_recording()
         self._timer_thread = threading.Thread(
             target=self._update_timer, args=(tmp_dir,), daemon=True
@@ -396,6 +411,24 @@ class MeetingRecorderApp(rumps.App):
                 self._set_idle()
             self._call_on_main(_discard)
             return
+
+        # A silent system track means capture failed — the tap and the loopback
+        # both fail by producing zeroes rather than raising. Say so now, while
+        # the user can still act on it, rather than leaving it to be discovered
+        # in the note.
+        sys_rms = self._recorder.system_rms()
+        if sys_rms < _SILENT_TRACK_RMS:
+            method = self._recorder.system_capture_method
+            log.warning("System audio track is silent (RMS=%.6f, method=%s)", sys_rms, method)
+            hint = (
+                f"Check that {self.config.system_device} is in your output path."
+                if method == "blackhole"
+                else "Grant Meeting Recorder audio capture access in System Settings."
+            )
+            self._call_on_main(
+                self._notify, "Meeting Recorder", "No system audio captured",
+                f"Only your microphone was recorded. {hint}",
+            )
 
         # Show name + context modal on main thread before dispatching pipeline
         self._pending_stop = (mic_path, sys_path, session_dt, duration, tmp_dir)

@@ -28,6 +28,7 @@ a = Analysis(
         'recorder',
         'recorder.audio',
         'recorder.mixer',
+        'recorder.systemtap',
         'transcriber',
         'transcriber.whisper',
         'summarizer',

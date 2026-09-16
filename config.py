@@ -63,6 +63,7 @@ class Config:
     low_disk_threshold_mb: int
     mic_threshold: int = 300
     ollama_prompt: str | None = None
+    capture_method: str = "auto"
 
 
 def load_config(path: Path) -> Config:
@@ -84,7 +85,14 @@ def load_config(path: Path) -> Config:
         low_disk_threshold_mb=raw["processing"]["low_disk_threshold_mb"],
         mic_threshold=raw["processing"].get("mic_threshold", 300),
         ollama_prompt=raw.get("ollama", {}).get("prompt", None),
+        capture_method=raw["audio"].get("capture_method", "auto"),
     )
+
+    if cfg.capture_method not in ("auto", "tap", "blackhole"):
+        raise ValueError(
+            f'[audio] capture_method must be "auto", "tap" or "blackhole", '
+            f'but was {cfg.capture_method!r}.'
+        )
 
     if cfg.ollama_prompt is not None and "{transcript}" not in cfg.ollama_prompt:
         raise ValueError(
