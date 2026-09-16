@@ -65,3 +65,40 @@ def write_note(
         encoding="utf-8",
     )
     return path
+
+
+def _frontmatter(note_path: Path) -> dict[str, str]:
+    """Parse the simple `key: value` frontmatter block at the top of a note."""
+    fields: dict[str, str] = {}
+    try:
+        lines = note_path.read_text().splitlines()
+    except OSError:
+        return fields
+    if not lines or lines[0].strip() != "---":
+        return fields
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, sep, value = line.partition(":")
+        if sep:
+            fields[key.strip()] = value.strip()
+    return fields
+
+
+def find_notes_for_date(output_dir: Path, dt: datetime) -> list[Path]:
+    """Return every note recorded on dt's date, oldest first.
+
+    Looks at the note's own frontmatter rather than its folder name: session
+    folders get renamed to a title slug once the meeting has one, so the folder
+    name carries no date for any successfully-named meeting.
+    """
+    week_dir = output_dir / week_folder(dt)
+    if not week_dir.exists():
+        return []
+    target = dt.strftime("%Y-%m-%d")
+    dated: list[tuple[str, Path]] = []
+    for note in week_dir.glob("*/meeting.md"):
+        fields = _frontmatter(note)
+        if fields.get("date") == target:
+            dated.append((fields.get("time", ""), note))
+    return [note for _, note in sorted(dated, key=lambda pair: pair[0])]
