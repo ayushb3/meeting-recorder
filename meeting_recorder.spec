@@ -41,6 +41,8 @@ a = Analysis(
         'ui.menu',
         'ui.settings_window',
         'ui.stop_dialog',
+        # Imported lazily inside the menu handler, so PyInstaller cannot see it.
+        'ui.transcript_url_dialog',
         'config',
     ],
     hookspath=[],
