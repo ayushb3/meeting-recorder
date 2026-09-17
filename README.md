@@ -202,7 +202,7 @@ The root menu is a fixed size — meetings live in the submenu, so it does not g
 | Item | Notes |
 |---|---|
 | Start / Stop Recording | Shows elapsed time while recording, then *Processing…* until the note is written |
-| Meetings ▸ | Recent notes grouped by day. Click one to open it. A ⚠ entry has a **Retry summary** child |
+| Meetings ▸ | Recent notes grouped by day. Click one to open it. A ⚠ entry has a **Retry Summary** child |
 | 🟢 Ollama ▸ | Colour shows server state at a glance: 🟢 ready, 🟡 running but model not pulled, 🔴 unreachable |
 | Settings… | Folder picker, audio device dropdowns, and the rest of the config |
 
@@ -280,7 +280,7 @@ To verify it's running: `curl http://localhost:11434` should return `Ollama is r
 
 ## Error recovery
 
-Audio is always preserved. If a stage fails — whisper crash, Ollama down, disk full — a `.error` file is written beside the audio and the session is marked in **Meetings ▸** with a ⚠. Open it and choose **Retry summary** to re-run the pipeline on the saved audio.
+Audio is always preserved. If a stage fails — whisper crash, Ollama down, disk full — a `.error` file is written beside the audio and the session is marked in **Meetings ▸** with a ⚠. Open it and choose **Retry Summary** to re-run the pipeline on the saved audio.
 
 An Ollama outage is a partial failure rather than a total one: the transcript is still written, and only the summary is missing, so the note is useful immediately and improves when you retry.
 
@@ -302,6 +302,18 @@ Both capture paths fail by producing silence rather than an error, so the app ch
 # Rebuild the app bundle
 .venv/bin/pyinstaller meeting_recorder.spec
 ```
+
+---
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [Getting Started](docs/getting-started.md) | First-time setup, build or receive the app, configure, and record your first meeting |
+| [Menu Reference](docs/menu-reference.md) | Every menu item, what it does, and when it is enabled |
+| [Troubleshooting](docs/troubleshooting.md) | Symptom-first guide to common problems |
+| [Diagrams](docs/diagrams/) | Pipeline flow, capture architecture, and menu tree as SVGs |
+| [Screenshots](docs/screenshots/README.md) | Guide to the screenshots that can be captured and where to drop them |
 
 ---
 

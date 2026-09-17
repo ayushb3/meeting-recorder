@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="420" viewBox="0 0 680 420"><rect width="680" height="420" fill="#1a2a3a" rx="10"/><rect x="20" y="60" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="90" y="78" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">Microphone</text>
+<text x="90" y="96" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">sounddevice</text>
+<rect x="20" y="140" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="90" y="158" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">System Audio</text>
+<text x="90" y="176" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">Core Audio tap</text>
+<path d="M160,82 L240,82" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<path d="M160,162 L240,162" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<path d="M240,82 L240,162" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<path d="M240,162 L280,162" stroke="#8ab8d8" stroke-width="1.5" fill="none"/><path d="M272,157 L280,162 L272,167" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<rect x="280" y="140" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="350" y="158" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">whisper.cpp</text>
+<text x="350" y="176" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">two-pass transcription</text>
+<path d="M350,184 L350,220" stroke="#8ab8d8" stroke-width="1.5" fill="none"/><path d="M345,212 L350,220 L355,212" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<rect x="280" y="220" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="350" y="238" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">Merge + dedup</text>
+<text x="350" y="256" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">bleed removal</text>
+<path d="M350,264 L350,300" stroke="#8ab8d8" stroke-width="1.5" fill="none"/><path d="M345,292 L350,300 L355,292" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<rect x="280" y="300" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="350" y="318" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">Ollama LLM</text>
+<text x="350" y="336" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">summary + title</text>
+<path d="M350,344 L350,380" stroke="#8ab8d8" stroke-width="1.5" fill="none"/><path d="M345,372 L350,380 L355,372" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<rect x="280" y="380" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="350" y="398" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">meeting.md</text>
+<text x="350" y="416" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">Obsidian vault</text>
+<path d="M420,402 L500,402" stroke="#8ab8d8" stroke-width="1.5" fill="none"/><path d="M492,397 L500,402 L492,407" stroke="#8ab8d8" stroke-width="1.5" fill="none"/>
+<rect x="500" y="380" width="140" height="44" fill="#2a4a6e" stroke="#5a9fd4" stroke-width="1.5" rx="6"/>
+<text x="570" y="398" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="13" font-weight="bold" fill="#e8f0fa" text-anchor="middle">Notification</text>
+<text x="570" y="416" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="middle">click to open</text>
+<text x="200" y="74" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#8ab8d8" text-anchor="middle">16 kHz mono</text>
+<text x="200" y="154" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#8ab8d8" text-anchor="middle">16 kHz mono</text>
+<text x="340" y="34" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="15" font-weight="bold" fill="#8ab8d8" text-anchor="middle">Pipeline Flow</text>
+<circle cx="325" cy="158" r="9" fill="#3a5068" stroke="#5a9fd4" stroke-width="1"/>
+<text x="325" y="162" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#e8f0fa" text-anchor="middle">1</text>
+<circle cx="325" cy="238" r="9" fill="#3a5068" stroke="#5a9fd4" stroke-width="1"/>
+<text x="325" y="242" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#e8f0fa" text-anchor="middle">2</text>
+<circle cx="325" cy="318" r="9" fill="#3a5068" stroke="#5a9fd4" stroke-width="1"/>
+<text x="325" y="322" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#e8f0fa" text-anchor="middle">3</text>
+<circle cx="325" cy="398" r="9" fill="#3a5068" stroke="#5a9fd4" stroke-width="1"/>
+<text x="325" y="402" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="bold" fill="#e8f0fa" text-anchor="middle">4</text></svg>
