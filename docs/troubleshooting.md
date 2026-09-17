@@ -178,3 +178,27 @@ Note: this entire issue does not apply on macOS 14.2+ because the Core Audio tap
 2. Check whether whisper.cpp is installed and working: run `whisper-cli --help` in a terminal.
 3. In the Meetings submenu, find the failed session (it will be listed under "Failed (no note)" or with a ⚠) and click **Retry** to re-run the pipeline.
 4. If transcription keeps failing, check that `[whisper] binary` and `[whisper] model` paths in your config both exist.
+
+---
+
+## Stream transcript import fails
+
+**Symptom:** **Import Transcript from Stream… ↗** opens Terminal, which reports an error instead of writing a note.
+
+**Cause and fix depend on the message.** The scraper names every failure deliberately, because the two easy confusions — a policy block versus a slow sign-in, a closed panel versus changed markup — send you looking in completely different places.
+
+| Message | Fix |
+|---|---|
+| `playwright is not installed` | `.venv/bin/pip install playwright` |
+| `Could not launch Google Chrome` | Install Chrome, or check it is at `/Applications/Google Chrome.app` |
+| `No transcript markup found` | The transcript panel was not open. Open it in the Chrome window and re-run |
+| `Transcript-like markup is present but no rows matched` | Microsoft changed the markup. The message lists what it did find; the selector needs re-deriving in DevTools |
+| `Incomplete: N/M rows` | Retry with `--steps` doubled from the command line |
+| `N row(s) were collected but produced no transcript line` | The speaker-label format changed. The message shows the offending rows |
+| `AADSTS…` codes during sign-in | Conditional Access is refusing the automated browser. No code change fixes this; the code is quotable to IT |
+
+**Nothing happens when you click the menu item:** the scraper lives in `scripts/` and is not part of the `.app` bundle, so it needs a source checkout. The item reports a missing script rather than failing silently — check the notification.
+
+**Sign-in is asked for every time:** the session profile at `~/.cache/meeting-recorder-spike/chrome-profile` is being cleared, or was deleted. It normally persists between runs.
+
+See [Importing Stream transcripts](stream-transcripts.md) for the full guide.

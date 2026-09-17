@@ -173,3 +173,11 @@ If the transcript is empty, the system audio track was not captured — see [No 
 On macOS 13 (Ventura) and earlier, the Core Audio process tap is unavailable. The app falls back automatically and tells you it has done so with a notification. That path requires BlackHole to be installed and a Multi-Output Device configured in Audio MIDI Setup — full instructions are in the [README](../README.md#on-macos-older-than-142-legacy-blackhole-setup).
 
 The new tap path is the reason colleagues who remember the old setup instructions can ignore them on any Mac running Sonoma 14.2 or newer.
+
+---
+
+## Optional — importing meetings you did not record
+
+Everything above covers recording meetings you attend. For a Teams/Stream recording made by someone else, **Import Transcript from Stream… ↗** takes the recording URL and scrapes the transcript into a note.
+
+It needs a one-time `playwright` install, a source checkout, and about ten seconds of your attention per run — the sign-in and opening the transcript panel cannot be automated. Full setup in [Importing Stream transcripts](stream-transcripts.md).

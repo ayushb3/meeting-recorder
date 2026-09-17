@@ -258,6 +258,7 @@ def _menu_tree() -> str:
         (2, "~/Documents/…/Meetings", "location footer (non-clickable)", "dim"),
         (2, "Open Meetings Folder ↗", "", "label"),
         (2, "Change Location…", "opens Settings", "label"),
+        (1, "Import Transcript from Stream… ↗", "URL prompt, then scrapes in Terminal", "label"),
         (1, "🟢/🟡/🔴 Ollama ▸", "colour shows server state", "label"),
         (2, "🟢 Running  /  🟡 Running — model not pulled  /  🔴 Not running", "", "caption"),
         (2, "model · host", "detail line", "dim"),

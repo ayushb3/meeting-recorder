@@ -1,6 +1,7 @@
 # ui/menu.py
 import logging
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,16 @@ def _bundle_resource(rel_path: str) -> str:
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         return str(Path(sys._MEIPASS) / rel_path)
     return str(Path(__file__).parent.parent / rel_path)
+
+
+def _repo_path(rel_path: str) -> str:
+    """Resolve a path in the source checkout, never inside the .app bundle.
+
+    For things that are deliberately not bundled — scripts/ and .venv/ — so a
+    frozen app resolves to the original checkout if one is alongside it, and
+    reports a missing file rather than silently looking in _MEIPASS.
+    """
+    return str(Path(__file__).resolve().parent.parent / rel_path)
 
 
 ICON_IDLE = _bundle_resource("assets/icon.png")
@@ -211,6 +222,11 @@ class MeetingRecorderApp(rumps.App):
         self._ollama_menu = rumps.MenuItem("⚪ Ollama")
         self._ollama_root_item = self._ollama_menu  # alias for clarity in _update_ollama_ui
 
+        # ---- Import from Stream (shells out — see import_stream_transcript) ----
+        self._import_transcript_item = rumps.MenuItem(
+            "Import Transcript from Stream… ↗", callback=self.import_stream_transcript
+        )
+
         # ---- Location items (shown at bottom of Meetings submenu) ----
         self._location_caption = rumps.MenuItem("", callback=None)
 
@@ -250,6 +266,7 @@ class MeetingRecorderApp(rumps.App):
             self._record_item,
             None,
             self._meetings_menu,
+            self._import_transcript_item,
             self._ollama_menu,
             None,
             self._settings_item,
@@ -775,6 +792,66 @@ class MeetingRecorderApp(rumps.App):
         script = f'tell application "Terminal" to do script "ollama pull {model}"'
         subprocess.Popen(["osascript", "-e", script])
         self._schedule_ollama_probes([5, 15, 30, 60])
+
+    def import_stream_transcript(self, _):
+        """Ask for a recording URL, then run the scraper in Terminal.
+
+        Deliberately shells out rather than scraping in-process: the scrape needs
+        playwright (which the .app bundle does not ship), a visible browser, a
+        manual sign-in and a manually opened transcript panel. Terminal is also
+        where the script's diagnostics are readable when a selector breaks.
+        """
+        from ui.transcript_url_dialog import (  # noqa: PLC0415
+            looks_like_stream_url,
+            open_transcript_url_dialog,
+        )
+
+        def _on_submit(url: str):
+            if not looks_like_stream_url(url):
+                log.info("URL does not look like a Stream recording; running anyway")
+            self._launch_transcript_scrape(url)
+
+        open_transcript_url_dialog(on_submit=_on_submit)
+
+    def _launch_transcript_scrape(self, url: str):
+        """Open Terminal running the scraper against *url*.
+
+        The URL is written into a temporary script rather than interpolated into
+        the AppleScript string: it is arbitrary pasted text, and `do script`
+        would otherwise hand it to the shell as code.
+        """
+        script_path = _repo_path("scripts/stream_transcript.py")
+        if not Path(script_path).exists():
+            self._notify(
+                "Meeting Recorder",
+                "Scraper not found",
+                "scripts/stream_transcript.py is missing from this install.",
+            )
+            return
+
+        python = _repo_path(".venv/bin/python")
+        if not Path(python).exists():
+            python = sys.executable
+
+        runner = Path(tempfile.mkdtemp(prefix="mr-scrape-")) / "run.sh"
+        runner.write_text(
+            "#!/bin/sh\n"
+            f"cd {shlex.quote(str(Path(script_path).parent.parent))}\n"
+            f"{shlex.quote(python)} {shlex.quote(script_path)} {shlex.quote(url)} --note\n"
+            'status=$?\n'
+            'echo\n'
+            'if [ $status -ne 0 ]; then echo "Scrape failed — see the error above."; fi\n'
+            'echo "Press Return to close."; read _\n'
+        )
+        runner.chmod(0o700)
+
+        script = f'tell application "Terminal" to do script "{runner}"'
+        subprocess.Popen(["osascript", "-e", script])
+        self._notify(
+            "Meeting Recorder",
+            "Scraping transcript",
+            "Sign in and open the transcript panel in the Chrome window.",
+        )
 
     def recheck_ollama(self, _):
         """Re-probe Ollama immediately (async)."""

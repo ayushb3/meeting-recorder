@@ -174,6 +174,13 @@ mic_threshold          = 300    # mic RMS gate (0–32767), suppresses speaker b
 
 Recording never waits on Ollama. If the summary model is unreachable the transcript is still captured and written; the note is marked and can be reprocessed later.
 
+### Importing a meeting you did not record
+
+For a Teams/Stream recording made by someone else, **Import Transcript from Stream… ↗** takes
+the recording's URL and scrapes the transcript into a note, with real speaker names. See
+[Importing Stream transcripts](docs/stream-transcripts.md) for setup and the manual steps it
+needs.
+
 ### The menu
 
 ![Meetings submenu expanded, showing Today grouping with meeting times and titles, a degraded entry with disclosure arrow, Earlier this week section, Failed entries, path caption, and folder actions](docs/screenshots/menu-meetings.png)
@@ -183,7 +190,7 @@ Recording never waits on Ollama. If the summary model is unreachable the transcr
 ────────
 Meetings ▸        Today — Wed 16 Sep
                   09:00  Standup
-                  11:00  FDE Roadshow
+                  11:00  Platform Roadmap
                   15:00  ⚠ 15:00  Product Review     ← summary failed, retry inside
                   ────────
                   Earlier this week
@@ -192,6 +199,7 @@ Meetings ▸        Today — Wed 16 Sep
                   ~/Documents/Obsidian/Meetings
                   Open Meetings Folder ↗
                   Change Location…
+Import Transcript from Stream… ↗
 🟢 Ollama ▸       🟢 Running
                   llama3.1:8b · localhost:11434
                   ────────
@@ -209,6 +217,7 @@ The root menu is a fixed size — meetings live in the submenu, so it does not g
 |---|---|
 | Start / Stop Recording | Shows elapsed time while recording, then *Processing…* until the note is written |
 | Meetings ▸ | Recent notes grouped by day. Click one to open it. A ⚠ entry has a **Retry Summary** child |
+| Import Transcript from Stream… ↗ | Scrapes a recording you did not make. Opens Terminal and a browser — see [the guide](docs/stream-transcripts.md) |
 | 🟢 Ollama ▸ | Colour shows server state at a glance: 🟢 ready, 🟡 running but model not pulled, 🔴 unreachable |
 | Settings… | Folder picker, audio device dropdowns, and the rest of the config |
 
@@ -317,6 +326,7 @@ Both capture paths fail by producing silence rather than an error, so the app ch
 |---|---|
 | [Getting Started](docs/getting-started.md) | First-time setup, build or receive the app, configure, and record your first meeting |
 | [Menu Reference](docs/menu-reference.md) | Every menu item, what it does, and when it is enabled |
+| [Importing Stream transcripts](docs/stream-transcripts.md) | Getting a transcript out of a meeting someone else recorded |
 | [Troubleshooting](docs/troubleshooting.md) | Symptom-first guide to common problems |
 | [Diagrams](docs/diagrams/) | Pipeline flow, capture architecture, and menu tree as SVGs |
 | [Screenshots](docs/screenshots/README.md) | Guide to the screenshots that can be captured and where to drop them |

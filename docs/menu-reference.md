@@ -111,6 +111,27 @@ At the bottom of the Meetings submenu:
 
 ---
 
+## Import Transcript from Stream… ↗
+
+Scrapes the transcript from a Teams/Stream recording made by someone else, and writes it into the vault as a note. Recorded meetings only distinguish you from everyone else; an imported transcript carries real speaker names.
+
+Clicking it opens a dialog asking for the recording URL. Paste the URL from the browser address bar and click **Scrape Transcript**.
+
+The `↗` is literal: the work happens in Terminal, not in the app. That is deliberate.
+
+| Why it leaves the app | |
+|---|---|
+| Needs `playwright` | A menu-bar recorder should not ship a browser automation stack, so it is not bundled |
+| Needs a visible browser | Microsoft's sign-in does not work headless |
+| Needs you | You sign in and open the transcript panel by hand — neither can be automated |
+| Fails in undocumented ways | Microsoft changes the markup; Terminal shows diagnostics a notification cannot |
+
+**Requires one-time setup** (`.venv/bin/pip install playwright`) and a source checkout — the scraper lives in `scripts/` and is not part of the `.app` bundle. If the script is missing, the menu item reports that rather than failing silently.
+
+See [Importing Stream transcripts](stream-transcripts.md) for the full guide.
+
+---
+
 ## 🟢/🟡/🔴 Ollama ▸
 
 | Ollama healthy | Ollama unreachable |
