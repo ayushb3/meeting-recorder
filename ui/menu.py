@@ -222,6 +222,11 @@ class MeetingRecorderApp(rumps.App):
         self._ollama_menu = rumps.MenuItem("⚪ Ollama")
         self._ollama_root_item = self._ollama_menu  # alias for clarity in _update_ollama_ui
 
+        # ---- Import a local audio/video file (in-process) ----
+        self._import_recording_item = rumps.MenuItem(
+            "Import Recording…", callback=self.import_recording
+        )
+
         # ---- Import from Stream (shells out — see import_stream_transcript) ----
         self._import_transcript_item = rumps.MenuItem(
             "Import Transcript from Stream… ↗", callback=self.import_stream_transcript
@@ -266,6 +271,7 @@ class MeetingRecorderApp(rumps.App):
             self._record_item,
             None,
             self._meetings_menu,
+            self._import_recording_item,
             self._import_transcript_item,
             self._ollama_menu,
             None,
@@ -812,6 +818,158 @@ class MeetingRecorderApp(rumps.App):
             self._launch_transcript_scrape(url)
 
         open_transcript_url_dialog(on_submit=_on_submit)
+
+    def import_recording(self, _):
+        """Import a local audio or video file and produce a summarised note.
+
+        Runs entirely in-process: no browser, no sign-in, no Terminal window.
+        The pipeline runs on a daemon thread so the menu stays responsive during
+        long transcriptions.  Progress is shown via _set_processing() and
+        reported through _notify() on completion.
+        """
+        from ui.settings_window import _pick_file  # noqa: PLC0415
+
+        file_types = [
+            ["Audio files", ["mp3", "m4a", "aac", "ogg", "flac", "wav", "mp4", "mov", "m4v"]],
+        ]
+        chosen = _pick_file("Select a recording to import", file_types)
+        if not chosen:
+            return
+
+        source_path = Path(chosen)
+
+        # Default datetime from the file's mtime
+        try:
+            mtime = source_path.stat().st_mtime
+            default_dt = datetime.fromtimestamp(mtime)
+        except OSError:
+            default_dt = datetime.now()
+
+        from ui.import_recording_dialog import open_import_recording_dialog  # noqa: PLC0415
+
+        def _on_import(confirmed_dt: datetime, meeting_name: str | None):
+            self._set_processing()
+            log.info(
+                "Dispatching import pipeline: file=%s dt=%s name=%s",
+                source_path.name, confirmed_dt, meeting_name,
+            )
+            threading.Thread(
+                target=self._run_import_pipeline,
+                args=(source_path, confirmed_dt, meeting_name),
+                daemon=True,
+            ).start()
+
+        def _on_cancel():
+            log.info("Import recording cancelled by user")
+
+        open_import_recording_dialog(
+            default_dt=default_dt,
+            filename=source_path.name,
+            on_import=_on_import,
+            on_cancel=_on_cancel,
+        )
+
+    def _run_import_pipeline(
+        self,
+        source_path: Path,
+        session_dt: datetime,
+        meeting_name: str | None,
+    ):
+        """Background thread: prepare audio, then call run_pipeline with single_source."""
+        from pipeline.importer import prepare_audio, get_duration_seconds  # noqa: PLC0415
+        from pipeline.importer import AudioImportError  # noqa: PLC0415
+
+        try:
+            # Step 1: get duration
+            try:
+                duration_seconds = get_duration_seconds(source_path)
+                log.info("Import duration: %ds", duration_seconds)
+            except AudioImportError as e:
+                log.error("Could not read duration: %s", e)
+                duration_seconds = 0  # non-fatal; note will show 0m
+
+            # Step 2: convert to 16 kHz mono WAV if needed
+            # Use a temp subdir of the output dir so the converted file is
+            # close to the session folder (same volume) for cheap rename later.
+            import tempfile
+            with tempfile.TemporaryDirectory(
+                prefix="mr-import-", dir=self.config.output_dir.parent
+            ) as tmp_str:
+                tmp_dir = Path(tmp_str)
+                try:
+                    audio_for_pipeline = prepare_audio(source_path, tmp_dir)
+                    log.info("Audio ready for pipeline: %s", audio_for_pipeline)
+                except AudioImportError as e:
+                    log.error("Audio preparation failed: %s", e)
+                    def _ui_prep_fail(msg=str(e)):
+                        self._set_idle()
+                        self._notify("Meeting Recorder", "Import failed", msg)
+                    self._call_on_main(_ui_prep_fail)
+                    return
+
+                # Step 3: run the pipeline with single_source
+                result = run_pipeline(
+                    mic_path=audio_for_pipeline,   # unused when single_source is set
+                    system_path=audio_for_pipeline, # unused when single_source is set
+                    session_dt=session_dt,
+                    duration_seconds=duration_seconds,
+                    meeting_name=meeting_name,
+                    output_dir=self.config.output_dir,
+                    whisper_binary=self.config.whisper_binary,
+                    whisper_model=self.config.whisper_model,
+                    ollama_model=self.config.ollama_model,
+                    ollama_host=self.config.ollama_host,
+                    keep_audio=self.config.keep_audio,
+                    ollama_prompt=self.config.ollama_prompt,
+                    single_source=audio_for_pipeline,
+                )
+
+            # tmp_dir is cleaned up by TemporaryDirectory context manager at this point
+
+            if result.success:
+                display_name = (
+                    result.meeting_name
+                    or (result.session_dir.name if result.session_dir else source_path.stem)
+                )
+                note_path_str = str(result.note_path) if result.note_path else None
+
+                def _ui_success():
+                    self._set_idle()
+                    if not result.summary_ok:
+                        self.title = "⚠"
+                    self._rebuild_meetings_menu()
+                    if result.summary_ok:
+                        self._notify(
+                            "Meeting Recorder", "Import complete", display_name,
+                            data={"note_path": note_path_str} if note_path_str else None,
+                            action_button="Open",
+                        )
+                    else:
+                        self._notify(
+                            "Meeting Recorder", "Import complete (summary unavailable)",
+                            result.warning or "Ollama was not reachable. Open Meetings menu to retry.",
+                        )
+                self._call_on_main(_ui_success)
+                log.info("Import pipeline complete: %s", result.note_path)
+            else:
+                def _ui_failure():
+                    self._set_idle()
+                    self.title = "⚠ Error"
+                    self._rebuild_meetings_menu()
+                    self._notify(
+                        "Meeting Recorder", "Import failed",
+                        f"Stage: {result.error_stage}. Open Meetings menu to retry.",
+                    )
+                self._call_on_main(_ui_failure)
+
+        except Exception as e:
+            log.exception("Unexpected import error")
+            def _ui_error():
+                self._set_idle()
+                self.title = "⚠ Error"
+                self._notify("Meeting Recorder", "Unexpected import error", str(e))
+                self._rebuild_meetings_menu()
+            self._call_on_main(_ui_error)
 
     def _launch_transcript_scrape(self, url: str):
         """Open Terminal running the scraper against *url*.

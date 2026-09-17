@@ -8,7 +8,12 @@ from pathlib import Path
 
 from notes.writer import week_folder, write_note
 from summarizer.ollama import OllamaUnavailableError, suggest_title, summarize
-from transcriber.whisper import TranscriptionError, merge_transcripts, transcribe_raw
+from transcriber.whisper import (
+    TranscriptionError,
+    _segments_to_lines,
+    merge_transcripts,
+    transcribe_raw,
+)
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +50,7 @@ def run_pipeline(
     meeting_name: str | None = None,
     llm_context: str | None = None,
     ollama_prompt: str | None = None,
+    single_source: Path | None = None,
 ) -> PipelineResult:
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
@@ -57,33 +63,61 @@ def run_pipeline(
         error_path.write_text(f"stage: {stage}\nerror: {message}\n")
         return PipelineResult(success=False, error_stage=stage, error_message=message)
 
-    # Move raw audio into session folder
-    dest_mic = session_dir / "audio-mic.wav"
-    dest_sys = session_dir / "audio-system.wav"
-    if mic_path != dest_mic:
-        if not mic_path.exists():
-            return write_error("setup", f"Mic audio file not found: {mic_path}")
-        shutil.move(mic_path, dest_mic)
-    if system_path != dest_sys:
-        if not system_path.exists():
-            return write_error("setup", f"System audio file not found: {system_path}")
-        shutil.move(system_path, dest_sys)
+    if single_source is not None:
+        # --- Single-source import path ---
+        # Never move the original file; if keep_audio is true, copy it into the
+        # session folder; otherwise transcribe it in place and leave the original
+        # entirely alone.  Either way, shutil.move is never called on the user's file.
+        if not single_source.exists():
+            return write_error("setup", f"Source file not found: {single_source}")
 
-    # Transcribe both sources and merge
-    try:
-        log.info("Transcribing system audio: %s", dest_sys.name)
-        sys_segments = transcribe_raw(dest_sys, whisper_binary, str(whisper_model), source="system")
-        log.info("System transcription: %d segments", len(sys_segments))
+        if keep_audio:
+            dest_audio = session_dir / ("audio-import" + single_source.suffix)
+            shutil.copy2(single_source, dest_audio)
+            audio_for_note: list[Path] = [dest_audio]
+        else:
+            dest_audio = single_source
+            audio_for_note = []  # original lives outside session dir — don't embed
 
-        log.info("Transcribing mic audio: %s", dest_mic.name)
-        mic_segments = transcribe_raw(dest_mic, whisper_binary, str(whisper_model), source="mic")
-        log.info("Mic transcription: %d segments", len(mic_segments))
+        try:
+            log.info("Transcribing imported audio: %s", single_source.name)
+            segments = transcribe_raw(dest_audio, whisper_binary, str(whisper_model), source="system")
+            log.info("Import transcription: %d segments", len(segments))
+            transcript_lines = _segments_to_lines(segments)
+            log.info("Transcript lines: %d", len(transcript_lines))
+        except TranscriptionError as e:
+            log.error("Transcription failed: %s", e)
+            return write_error("transcribe", str(e))
 
-        transcript_lines = merge_transcripts(sys_segments, mic_segments)
-        log.info("Merged transcript: %d lines", len(transcript_lines))
-    except TranscriptionError as e:
-        log.error("Transcription failed: %s", e)
-        return write_error("transcribe", str(e))
+    else:
+        # --- Normal two-track recorded path ---
+        # Move raw audio into session folder
+        dest_mic = session_dir / "audio-mic.wav"
+        dest_sys = session_dir / "audio-system.wav"
+        if mic_path != dest_mic:
+            if not mic_path.exists():
+                return write_error("setup", f"Mic audio file not found: {mic_path}")
+            shutil.move(mic_path, dest_mic)
+        if system_path != dest_sys:
+            if not system_path.exists():
+                return write_error("setup", f"System audio file not found: {system_path}")
+            shutil.move(system_path, dest_sys)
+
+        # Transcribe both sources and merge
+        try:
+            log.info("Transcribing system audio: %s", dest_sys.name)
+            sys_segments = transcribe_raw(dest_sys, whisper_binary, str(whisper_model), source="system")
+            log.info("System transcription: %d segments", len(sys_segments))
+
+            log.info("Transcribing mic audio: %s", dest_mic.name)
+            mic_segments = transcribe_raw(dest_mic, whisper_binary, str(whisper_model), source="mic")
+            log.info("Mic transcription: %d segments", len(mic_segments))
+
+            transcript_lines = merge_transcripts(sys_segments, mic_segments)
+            log.info("Merged transcript: %d lines", len(transcript_lines))
+        except TranscriptionError as e:
+            log.error("Transcription failed: %s", e)
+            return write_error("transcribe", str(e))
 
     # Summarize (non-fatal if Ollama down)
     _ollama_unavailable = False
@@ -155,8 +189,17 @@ def run_pipeline(
             log.info("Degraded marker written: %s", marker)
         except Exception as e:
             log.warning("Could not write degraded marker %s: %s", marker, e)
-    dest_mic = session_dir / "audio-mic.wav"
-    dest_sys = session_dir / "audio-system.wav"
+    if single_source is not None:
+        # audio_for_note was set in the single-source branch above.
+        # Update dest reference in case session_dir was renamed.
+        if keep_audio and audio_for_note:
+            audio_for_note = [session_dir / audio_for_note[0].name]
+        note_audio_files = audio_for_note
+    else:
+        dest_mic = session_dir / "audio-mic.wav"
+        dest_sys = session_dir / "audio-system.wav"
+        note_audio_files = [dest_mic, dest_sys]
+
     try:
         log.info("Writing note to %s", session_dir)
         note_path = write_note(
@@ -164,7 +207,7 @@ def run_pipeline(
             duration_seconds=duration_seconds,
             summary=summary,
             transcript_lines=transcript_lines,
-            audio_files=[dest_mic, dest_sys],
+            audio_files=note_audio_files,
             output_dir=session_dir,
             overwrite=True,
             meeting_name=meeting_name,
@@ -176,8 +219,12 @@ def run_pipeline(
 
     # Clean up audio if keep_audio is False
     if not keep_audio:
-        dest_mic.unlink(missing_ok=True)
-        dest_sys.unlink(missing_ok=True)
+        if single_source is None:
+            dest_mic = session_dir / "audio-mic.wav"
+            dest_sys = session_dir / "audio-system.wav"
+            dest_mic.unlink(missing_ok=True)
+            dest_sys.unlink(missing_ok=True)
+        # For single_source: the original file is never touched
 
     return PipelineResult(
         success=True,
