@@ -23,6 +23,8 @@ If the pipeline completes with a warning (summary unavailable), a `⚠` symbol a
 
 ## Root menu items
 
+![Root menu in idle state: Start Recording, Meetings submenu, Ollama status indicator, Settings, and Quit](screenshots/menu-idle.png)
+
 ### ● Start Recording
 
 Starts capturing audio from both the microphone and the system audio tap simultaneously.
@@ -34,6 +36,8 @@ Starts capturing audio from both the microphone and the system audio tap simulta
 
 ### ■ Stop Recording — MM:SS
 
+![Root menu while recording: Stop Recording item with elapsed time counter](screenshots/menu-recording.png)
+
 Shows the elapsed recording time, updating every second. Click it to stop.
 
 **After stopping:**
@@ -42,6 +46,9 @@ Shows the elapsed recording time, updating every second. Click it to stop.
    - **Context for AI summary** — optional context (e.g. who attended, what the meeting was for). Leave blank if not needed.
    Click **Process** (or press Return) to proceed, or **Skip** to omit both fields.
 2. The item changes to **Processing…** and is disabled while the pipeline runs.
+
+   ![Root menu during pipeline processing: Processing item greyed out and not clickable](screenshots/menu-processing.png)
+
 3. When the note is written, the item returns to **● Start Recording**.
 
 The item is disabled (no callback) while processing is in progress, preventing a second recording from starting before the first completes.
@@ -49,6 +56,8 @@ The item is disabled (no callback) while processing is in progress, preventing a
 ---
 
 ## Meetings ▸
+
+![Meetings submenu showing Today grouping with meeting times and titles, a degraded entry marked with a warning triangle and disclosure arrow, Earlier this week section, a Failed entry with no note, path caption, Open Meetings Folder, and Change Location](screenshots/menu-meetings.png)
 
 A submenu listing your recent notes, grouped by day. The contents are rebuilt automatically every 45 seconds and immediately after each pipeline completes.
 
@@ -104,6 +113,10 @@ At the bottom of the Meetings submenu:
 
 ## 🟢/🟡/🔴 Ollama ▸
 
+| Ollama healthy | Ollama unreachable |
+|---|---|
+| ![Ollama submenu when healthy: green Running status, model name and host URL, and action items](screenshots/ollama-green.png) | ![Ollama submenu when server is down: red Not running status, no server message, and action items](screenshots/ollama-red.png) |
+
 The root item colour reflects the state of the Ollama server at a glance. It is probed asynchronously every 45 seconds and does not block menu rendering.
 
 | Colour | Root item | Status line | What it means |
@@ -148,6 +161,8 @@ Quits the application. Any in-progress recording is not automatically stopped fi
 ---
 
 ## Notifications
+
+![macOS notification from Meeting Recorder with title Note saved and meeting name Cloud Feature Development](screenshots/notification.png)
 
 When the pipeline completes successfully, a macOS notification is sent:
 

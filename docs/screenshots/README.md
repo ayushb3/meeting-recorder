@@ -1,167 +1,158 @@
 # Screenshots
 
-This folder holds screenshot assets for the documentation. The screenshots below need to be captured manually — they require the app to be running and interacted with in real time, which cannot be automated.
-
-Capture method: use Command-Shift-4, then press Space to switch to window-capture mode, then click the menu or window you want. This produces a retina PNG with a shadow.
+This folder contains screenshot assets used throughout the documentation. All eight screenshots have been captured and are ready to use.
 
 ---
 
-## Prerequisite: use the demo vault
+## Existing screenshots
 
-**Before taking any screenshot that shows meeting names, switch the app to the demo vault.** This keeps real meeting names, colleague names, and internal project names out of any documentation you share.
+| File | What it shows |
+|---|---|
+| `menu-idle.png` | Root menu, idle state: ● Start Recording, Meetings ▸, 🟢 Ollama ▸, Settings…, Quit |
+| `menu-recording.png` | Root menu while recording: ■ Stop Recording — elapsed time counter |
+| `menu-processing.png` | Root menu during the pipeline: Processing… item greyed out and not clickable |
+| `menu-meetings.png` | Meetings submenu expanded — Today grouping with times and titles, a ⚠ degraded entry (Roadmap Sync) with a disclosure arrow, Earlier this week section, Failed (no note) section with a ⚠ entry, path caption, Open Meetings Folder ↗, Change Location… |
+| `notification.png` | macOS notification: Meeting Recorder / Note saved / Cloud Feature Development |
+| `ollama-green.png` | Ollama submenu, healthy: 🟢 Running, gemma:latest · http://localhost:11434, action items |
+| `ollama-red.png` | Ollama submenu, unreachable: 🔴 Not running, no server at http://localhost:11434, action items |
+| `settings-window.png` | Settings window: Recording Storage, Audio Devices (with dropdowns and mic threshold), Transcription, AI Summary, Processing sections, Cancel/Save buttons |
 
-### Step 1 — generate the demo vault
+> `menu-meetings.png` was captured against the demo vault (`scripts/demo_vault.py`). Re-captures should use the demo vault too so no real meeting names, colleague names, or internal project names appear in shared docs.
 
-```
+---
+
+## Re-capturing a screenshot
+
+Use the same technique for all captures: **Command-Shift-4, then Space** to switch to window-capture mode, then click the menu or window. This produces a retina PNG with a drop shadow.
+
+### Prerequisite: switch to the demo vault
+
+Before capturing any screenshot that shows meeting names, generate and switch to the demo vault so real names do not appear in docs.
+
+**Generate the vault:**
+
+```bash
 python scripts/demo_vault.py
 ```
 
-This writes fictional meetings to `~/Documents/MeetingRecorderDemo` (or a path you specify). The script prints a summary of what was created and step-by-step switching instructions.
+This writes fictional meetings to `~/Documents/MeetingRecorderDemo`. Pass `--force` to overwrite an existing demo vault.
 
-If the directory already exists and is non-empty, the script will refuse to run unless you pass `--force`. This is intentional — it prevents accidentally overwriting your real vault.
-
-### Step 2 — note your real output_dir
-
-Before switching, record your current `output_dir` so you can restore it:
-
-```
-cat "~/Library/Application Support/MeetingRecorder/config.toml"
-```
-
-Copy the `output_dir` value somewhere safe (e.g. a sticky note).
-
-### Step 3 — switch the app to the demo vault
-
-Option A — Settings UI (recommended):
+**Switch to it** (Settings UI recommended):
 
 1. Click the menu bar icon → **Settings…** → **Output Folder** → **Browse…**
 2. Navigate to `~/Documents/MeetingRecorderDemo` and select it.
 3. Click **Save**.
 
-Option B — Edit config directly (app must not be running):
+**Restore your real vault** when done:
 
-Edit `~/Library/Application Support/MeetingRecorder/config.toml`, set:
-
-```toml
-output_dir = "/Users/<you>/Documents/MeetingRecorderDemo"
-```
-
-Then re-launch the app.
+1. **Settings…** → **Output Folder** → **Browse…** → select your original path.
+2. Verify the app shows your real meetings in the Meetings submenu.
+3. Optionally delete the demo vault: `rm -rf ~/Documents/MeetingRecorderDemo`
 
 ---
 
-## Needed screenshots
-
-### 1. `menu-idle.png` — Menu bar menu, idle state
-
-**What to show:** The full menu open with Ollama running (🟢) and at least one meeting in the Meetings submenu.
+### `menu-idle.png`
 
 **Steps:**
-1. Launch Meeting Recorder from Finder.
+1. Launch Meeting Recorder from Finder (not from a terminal).
 2. Make sure `ollama serve` is running.
 3. Click the menu bar icon to open the menu.
-4. Press Command-Shift-4, then Space, then click the open menu.
+4. Command-Shift-4 → Space → click the open menu.
 
-**Used in:** getting-started.md (overview section)
+**Used in:** README.md, getting-started.md, menu-reference.md
 
 ---
 
-### 2. `menu-recording.png` — Menu bar menu, recording state
-
-**What to show:** The menu open while recording is active, showing the "■ Stop Recording — MM:SS" item and the elapsed-time title next to the icon.
+### `menu-recording.png`
 
 **Steps:**
 1. Click **● Start Recording**.
-2. Wait a few seconds so the timer shows a non-zero time.
-3. Click the icon again to open the menu (without stopping the recording).
+2. Wait a few seconds so the timer shows a non-zero elapsed time.
+3. Click the menu bar icon to open the menu without stopping the recording.
 4. Capture the open menu.
 
 **Used in:** menu-reference.md
 
 ---
 
-### 3. `menu-meetings-degraded.png` — Meetings submenu with a ⚠ entry
-
-**What to show:** The Meetings submenu open, with at least one entry showing the ⚠ prefix and the sub-items (Open Note, Retry Summary, Reveal in Finder) visible.
+### `menu-processing.png`
 
 **Steps:**
-1. The demo vault includes a "Roadmap Sync" session with a `summarize.error` file — it will appear as a ⚠ entry automatically.
-2. Hover over the Meetings submenu to open it.
-3. Hover over the ⚠ entry so its submenu appears.
-4. Capture the full menu tree (both levels).
+1. Stop an active recording.
+2. While the pipeline is running (menu shows Processing…), click the icon to open the menu.
+3. Capture the menu — the Processing… item will be greyed out.
 
-**Tip:** Use Command-Shift-4 with a drag to capture a region rather than a window if the two-level submenu does not fit in window-capture mode.
-
-**Used in:** menu-reference.md (degraded entries section)
+**Used in:** menu-reference.md
 
 ---
 
-### 4. `ollama-submenu.png` — Ollama submenu states
+### `menu-meetings.png`
 
-Ideally three separate screenshots, one per state:
+> Capture with the demo vault active — it includes a Roadmap Sync session with a `summarize.error` file that appears as a ⚠ degraded entry.
 
-- `ollama-green.png` — 🟢 Running
-- `ollama-yellow.png` — 🟡 Running — model not pulled
-- `ollama-red.png` — 🔴 Not running
+**Steps:**
+1. Switch to the demo vault (see prerequisite above).
+2. Click the menu bar icon to open the root menu.
+3. Hover over **Meetings ▸** to open the submenu.
+4. Capture the submenu (Command-Shift-4, drag to capture a region if the full submenu does not fit in window-capture mode).
 
-**Steps for 🔴:** Run `pkill ollama` or quit the Ollama app, wait a few seconds, then click Re-check Now.
-**Steps for 🟡:** Pull a model name that does not exist: add `model = "nonexistent:latest"` to `[ollama]` in config temporarily, then Re-check Now.
-**Steps for 🟢:** Normal state with `ollama serve` running and the correct model pulled.
-
-**Used in:** menu-reference.md (Ollama submenu section)
+**Used in:** README.md, menu-reference.md
 
 ---
 
-### 5. `settings-window.png` — Settings window
+### `notification.png`
 
-**What to show:** The Settings window open with the folder picker and device dropdowns visible.
+**Steps:**
+1. Complete a recording with the demo vault active so the meeting title is fictional.
+2. Capture the macOS notification that appears in the top-right corner immediately after the pipeline finishes.
+
+**Used in:** menu-reference.md, getting-started.md
+
+---
+
+### `ollama-green.png`
+
+**Steps:**
+1. Make sure `ollama serve` is running and the configured model is pulled.
+2. Click the menu bar icon → hover over **🟢 Ollama ▸**.
+3. Capture the submenu.
+
+**Used in:** menu-reference.md
+
+---
+
+### `ollama-red.png`
+
+**Steps:**
+1. Quit Ollama (`pkill ollama` or quit the Ollama desktop app) and wait a few seconds.
+2. Click **Refresh Ollama Status** or wait for the 45-second probe.
+3. Click the menu bar icon → hover over **🔴 Ollama ▸**.
+4. Capture the submenu.
+
+**Used in:** menu-reference.md, troubleshooting.md
+
+---
+
+### `settings-window.png`
 
 **Steps:**
 1. Click **Settings…** from the menu.
-2. Capture the window using Command-Shift-4 + Space + click.
+2. Command-Shift-4 → Space → click the Settings window.
 
-**Used in:** getting-started.md (configuration section)
-
----
-
-### 6. `stop-modal.png` — Stop recording dialog
-
-**What to show:** The two dialogs that appear after clicking Stop Recording — first the meeting name dialog, then the context dialog.
-
-**Steps:**
-1. Start a short recording.
-2. Click Stop.
-3. Capture the "Meeting Saved" name dialog before clicking Next.
-4. Click Next, then capture the "Meeting Context" dialog.
-
-**Used in:** getting-started.md (recording section)
-
----
-
-## Restore your real vault afterwards
-
-Once all screenshots are captured:
-
-1. Switch back to your real vault:
-   - Settings UI: **Settings…** → **Output Folder** → **Browse…** → select your original path.
-   - Config file: restore the original `output_dir` value and re-launch.
-
-2. Verify the app shows your real meetings again by opening the Meetings submenu.
-
-3. Delete the demo vault:
-
-```
-rm -rf ~/Documents/MeetingRecorderDemo
-```
+**Used in:** README.md, getting-started.md
 
 ---
 
 ## Referencing screenshots in docs
 
-Once captured, drop the PNG files into this folder. The docs reference them relative to the project root. For example, to add screenshot 1 to a doc:
+From files inside `docs/` (e.g. `docs/menu-reference.md`):
 
 ```markdown
-![Menu bar menu, idle state](../docs/screenshots/menu-idle.png)
+![Alt text describing what the screenshot shows](screenshots/filename.png)
 ```
 
-The docs currently contain placeholder notes where screenshots would go rather than broken image tags.
+From the project root `README.md`:
+
+```markdown
+![Alt text describing what the screenshot shows](docs/screenshots/filename.png)
+```

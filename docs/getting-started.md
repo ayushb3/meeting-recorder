@@ -116,6 +116,8 @@ Save the config file, then **relaunch the app** (quit from its menu bar icon, th
 
 After the relaunch the app sits quietly in the menu bar with no Dock icon. You can also open **Settings…** from the menu to adjust the folder and device choices through a graphical window rather than editing the file by hand.
 
+![Settings window with Recording Storage, Audio Devices, Transcription, AI Summary, and Processing sections](screenshots/settings-window.png)
+
 ---
 
 ## 4. Grant the audio permission
@@ -136,6 +138,8 @@ If you missed the prompt, open System Settings → Privacy & Security → Microp
 
 Steps:
 
+![Root menu in idle state, showing Start Recording, Meetings submenu, green Ollama status indicator, Settings, and Quit](screenshots/menu-idle.png)
+
 1. Make sure Ollama is running. The menu bar icon shows **🟢 Ollama** when it is ready. If it shows 🔴, click **Ollama ▸ Start Ollama in Terminal** to start it.
 2. Click the menu bar icon, then **● Start Recording**.
 3. The icon changes and the item shows **■ Stop Recording — MM:SS** counting up.
@@ -150,7 +154,11 @@ Steps:
 
 ## Did it work? — quick verification
 
-Record 30 seconds of audio from a YouTube video playing on your Mac, then stop recording. After the note is written:
+Record 30 seconds of audio from a YouTube video playing on your Mac, then stop recording. After the note is written you receive a notification like this:
+
+![macOS notification from Meeting Recorder: Note saved with meeting name Cloud Feature Development](screenshots/notification.png)
+
+After the note is written:
 
 - Open the note from the notification or from **Meetings ▸** in the menu.
 - Check the **Full Transcript** section — it should contain actual text from the video, not blank space or silence markers.

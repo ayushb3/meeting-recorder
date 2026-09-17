@@ -4,6 +4,8 @@ A macOS menu bar app that records meetings (mic + system audio), transcribes wit
 
 System audio is captured with a **Core Audio process tap**, so there is no audio driver to install and nothing to configure. It works whatever you are listening on, Bluetooth earbuds included.
 
+![Root menu in idle state, showing Start Recording, Meetings submenu, Ollama status, Settings, and Quit](docs/screenshots/menu-idle.png)
+
 ## How it works
 
 ```
@@ -123,6 +125,8 @@ On first launch the app copies a template to:
 
 **Settings…** in the menu bar opens a window with a folder picker and device dropdowns. It writes the same file, so you can edit it by hand instead if you prefer.
 
+![Settings window showing Recording Storage, Audio Devices, Transcription, AI Summary, and Processing sections with Cancel and Save buttons](docs/screenshots/settings-window.png)
+
 ```toml
 [paths]
 output_dir = "~/Documents/Obsidian/Meetings"   # where notes are saved
@@ -171,6 +175,8 @@ mic_threshold          = 300    # mic RMS gate (0–32767), suppresses speaker b
 Recording never waits on Ollama. If the summary model is unreachable the transcript is still captured and written; the note is marked and can be reprocessed later.
 
 ### The menu
+
+![Meetings submenu expanded, showing Today grouping with meeting times and titles, a degraded entry with disclosure arrow, Earlier this week section, Failed entries, path caption, and folder actions](docs/screenshots/menu-meetings.png)
 
 ```
 ● Start Recording              ■ Stop Recording — 12:34 while recording

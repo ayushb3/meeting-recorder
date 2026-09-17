@@ -50,7 +50,9 @@ Use `python app.py` only for menu and pipeline development work where you do not
 
 ## Ollama is unreachable (🔴 in the menu)
 
-**Symptom:** The Ollama submenu shows 🔴 and "Not running". Recording still works, but notes are saved without a summary and the AI-generated title.
+**Symptom:** The Ollama submenu shows 🔴 and "Not running" as shown below. Recording still works, but notes are saved without a summary and the AI-generated title.
+
+![Ollama submenu in the not-running state: red dot, Not running status, no server message at localhost:11434, and action items](screenshots/ollama-red.png)
 
 **Cause:** The Ollama server is not running.
 
