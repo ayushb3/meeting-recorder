@@ -55,7 +55,7 @@ Use `python app.py` only for menu and pipeline development work where you do not
 **Cause:** The Ollama server is not running.
 
 **Fix:**
-1. Click **Ollama ▸ Start Ollama in Terminal**. A Terminal window opens running `ollama serve`. The app re-probes automatically after a few seconds.
+1. Click **Ollama ▸ Start Ollama in Terminal ↗**. A Terminal window opens running `ollama serve`. The app re-probes automatically after a few seconds.
 2. Alternatively, run `ollama serve` yourself in a terminal or use the Ollama desktop app (which starts the server automatically on login).
 3. Once the icon turns 🟢, any pending summaries can be retried (see below).
 
@@ -128,7 +128,7 @@ Note: this entire issue does not apply on macOS 14.2+ because the Core Audio tap
 **Cause:** The model name in your config (for example `llama3.1:8b`) has not been downloaded.
 
 **Fix:**
-1. Click **Ollama ▸ Pull Model…**. This opens Terminal and runs `ollama pull llama3.1:8b` (or whatever model is in your config). The download is several GB and may take a few minutes.
+1. Click **Ollama ▸ Pull Model… ↗**. This opens Terminal and runs `ollama pull llama3.1:8b` (or whatever model is in your config). The download is several GB and may take a few minutes.
 2. The app re-probes automatically; the icon will turn 🟢 when the pull completes.
 
 ---
@@ -161,7 +161,7 @@ Note: this entire issue does not apply on macOS 14.2+ because the Core Audio tap
 
 **Cause:** The session directory was renamed or moved after the note was written (for example, you reorganised your Obsidian vault). The path cached in the menu is now stale.
 
-**Fix:** Click **Open Meetings Folder** in the Meetings submenu to browse to the note manually in Finder. In future, avoid moving session folders out of the output directory structure.
+**Fix:** Click **Open Meetings Folder ↗** in the Meetings submenu to browse to the note manually in Finder. In future, avoid moving session folders out of the output directory structure.
 
 ---
 

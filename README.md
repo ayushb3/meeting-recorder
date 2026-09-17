@@ -161,11 +161,11 @@ mic_threshold          = 300    # mic RMS gate (0–32767), suppresses speaker b
 
 ## Usage
 
-1. Start Ollama: `ollama serve` (or use **Ollama ▸ Start Ollama in Terminal**)
+1. Start Ollama: `ollama serve` (or use **Ollama ▸ Start Ollama in Terminal ↗**)
 2. Launch **Meeting Recorder** — it lives in the menu bar, with no Dock icon
 3. Click **Start Recording** before your meeting starts
 4. Click **Stop Recording** when done
-5. A modal appears — enter a meeting name and optional context for the AI summary
+5. A dialog appears — optionally enter a suggested title and context for the AI summary, then click **Process**
 6. Wait for the notification: "Note saved — *Your Meeting Title*". Click it to open the note
 
 Recording never waits on Ollama. If the summary model is unreachable the transcript is still captured and written; the note is marked and can be reprocessed later.
@@ -184,14 +184,14 @@ Meetings ▸        Today — Wed 16 Sep
                   Mon    Design Review
                   ────────
                   ~/Documents/Obsidian/Meetings
-                  Open Meetings Folder
+                  Open Meetings Folder ↗
                   Change Location…
 🟢 Ollama ▸       🟢 Running
                   llama3.1:8b · localhost:11434
                   ────────
-                  Start Ollama in Terminal
-                  Pull Model…
-                  Re-check Now
+                  Start Ollama in Terminal ↗
+                  Pull Model… ↗
+                  Refresh Ollama Status
 ────────
 Settings…
 Quit

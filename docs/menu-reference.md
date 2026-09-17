@@ -15,7 +15,7 @@ The icon has two states:
 | Idle or processing | Standard template icon (adapts to light/dark menu bar) |
 | Recording | Recording variant icon |
 
-While recording, the elapsed time is shown next to the icon as a live counter (e.g. `03:42`). While the pipeline is running after you stop, it shows `Processing...`.
+While recording, the elapsed time is shown next to the icon as a live counter (e.g. `03:42`). While the pipeline is running after you stop, it shows `Processing…`.
 
 If the pipeline completes with a warning (summary unavailable), a `⚠` symbol appears briefly. If the pipeline fails entirely, `⚠ Error` is shown.
 
@@ -37,9 +37,10 @@ Starts capturing audio from both the microphone and the system audio tap simulta
 Shows the elapsed recording time, updating every second. Click it to stop.
 
 **After stopping:**
-1. Two dialogs appear in sequence:
-   - **Meeting name** — used as the folder and note title. Click "Skip" to let the LLM choose a title automatically.
-   - **Meeting context** — optional context for the AI summary (e.g. who attended, what the meeting was for). Click "Skip" if not needed.
+1. A single dialog appears with two optional fields:
+   - **Suggested title** — used as the folder and note title. Leave blank to let the LLM choose a title from the transcript.
+   - **Context for AI summary** — optional context (e.g. who attended, what the meeting was for). Leave blank if not needed.
+   Click **Process** (or press Return) to proceed, or **Skip** to omit both fields.
 2. The item changes to **Processing…** and is disabled while the pipeline runs.
 3. When the note is written, the item returns to **● Start Recording**.
 
@@ -81,9 +82,9 @@ This item has a submenu rather than a direct click action:
 
 | Submenu item | What it does |
 |---|---|
-| **Open Note** | Opens the note file, which will have a partial transcript or a placeholder summary |
+| **Open Note ↗** | Opens the note file, which will have a partial transcript or a placeholder summary |
 | **Retry Summary** | Re-runs the full pipeline on the saved audio files from that session |
-| **Reveal in Finder** | Opens Finder with the session folder selected |
+| **Reveal in Finder ↗** | Opens Finder with the session folder selected |
 
 ### Failed sessions (no note)
 
@@ -96,7 +97,7 @@ At the bottom of the Meetings submenu:
 | Item | What it does |
 |---|---|
 | `~/Documents/…/Meetings` | Shows the current output folder (non-clickable, display only) |
-| **Open Meetings Folder** | Opens the output directory in Finder |
+| **Open Meetings Folder ↗** | Opens the output directory in Finder |
 | **Change Location…** | Opens the Settings window with the folder picker focused |
 
 ---
@@ -128,9 +129,9 @@ llama3.1:8b not found at http://localhost:11434
 
 | Item | What it does |
 |---|---|
-| **Start Ollama in Terminal** | Opens Terminal and runs `ollama serve`. The app re-probes at 2, 5, 10, and 20 seconds after you click it, so the status updates automatically once the server is up. |
-| **Pull Model…** | Opens Terminal and runs `ollama pull <model>` with the model name from your config. Re-probes at 5, 15, 30, and 60 seconds. |
-| **Re-check Now** | Triggers an immediate background probe. Useful after manually starting Ollama without using the menu. |
+| **Start Ollama in Terminal ↗** | Opens Terminal and runs `ollama serve`. The app re-probes at 2, 5, 10, and 20 seconds after you click it, so the status updates automatically once the server is up. |
+| **Pull Model… ↗** | Opens Terminal and runs `ollama pull <model>` with the model name from your config. Re-probes at 5, 15, 30, and 60 seconds. |
+| **Refresh Ollama Status** | Triggers an immediate background probe. Useful after manually starting Ollama without using the menu. |
 
 ---
 

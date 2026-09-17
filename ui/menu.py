@@ -205,9 +205,9 @@ class MeetingRecorderApp(rumps.App):
         # ---- Ollama submenu ----
         self._ollama_status_item = rumps.MenuItem("Checking…", callback=None)
         self._ollama_detail_item = rumps.MenuItem("", callback=None)
-        self._ollama_start_item = rumps.MenuItem("Start Ollama in Terminal", callback=self.start_ollama)
-        self._ollama_pull_item = rumps.MenuItem("Pull Model…", callback=self.pull_model)
-        self._ollama_recheck_item = rumps.MenuItem("Re-check Now", callback=self.recheck_ollama)
+        self._ollama_start_item = rumps.MenuItem("Start Ollama in Terminal ↗", callback=self.start_ollama)
+        self._ollama_pull_item = rumps.MenuItem("Pull Model… ↗", callback=self.pull_model)
+        self._ollama_recheck_item = rumps.MenuItem("Refresh Ollama Status", callback=self.recheck_ollama)
         self._ollama_menu = rumps.MenuItem("⚪ Ollama")
         self._ollama_root_item = self._ollama_menu  # alias for clarity in _update_ollama_ui
 
@@ -279,7 +279,7 @@ class MeetingRecorderApp(rumps.App):
 
     def _set_processing(self):
         """Disable the hero item while the pipeline runs (main thread only)."""
-        self.title = "Processing..."
+        self.title = "Processing…"
         self._record_item.title = "Processing…"
         self._record_item.set_callback(None)
 
@@ -443,37 +443,31 @@ class MeetingRecorderApp(rumps.App):
         mic_path, sys_path, session_dt, duration, tmp_dir = self._pending_stop
         self._pending_stop = None
 
-        # Window 1: meeting name
-        name_win = rumps.Window(
-            message="Meeting name (used for folder and note title):",
-            title="Meeting Saved",
-            default_text="",
-            ok="Next",
-            cancel="Skip",
-            dimensions=(320, 24),
-        )
-        name_resp = name_win.run()
-        meeting_name: str | None = name_resp.text.strip() if name_resp.clicked else None
+        from ui.stop_dialog import open_stop_dialog
 
-        # Window 2: optional context for the LLM
-        ctx_win = rumps.Window(
-            message="Add context for the AI summary (optional):\ne.g. 'Q2 planning with design team, focused on redesign timeline'",
-            title="Meeting Context",
-            default_text="",
-            ok="Process",
-            cancel="Skip",
-            dimensions=(320, 60),
-        )
-        ctx_resp = ctx_win.run()
-        llm_context = ctx_resp.text.strip() if ctx_resp.clicked and ctx_resp.text.strip() else None
+        def _on_process(meeting_name, llm_context):
+            self._set_processing()
+            log.info(
+                "Dispatching pipeline: duration=%ds name=%s context=%s",
+                duration, meeting_name, llm_context,
+            )
+            threading.Thread(
+                target=self._run_pipeline,
+                args=(mic_path, sys_path, session_dt, duration, meeting_name, llm_context, None, tmp_dir),
+                daemon=True,
+            ).start()
 
-        self._set_processing()
-        log.info("Dispatching pipeline: duration=%ds name=%s context=%s", duration, meeting_name, llm_context)
-        threading.Thread(
-            target=self._run_pipeline,
-            args=(mic_path, sys_path, session_dt, duration, meeting_name, llm_context, None, tmp_dir),
-            daemon=True,
-        ).start()
+        def _on_skip():
+            # Skip both fields: name=None (LLM picks), context=None
+            self._set_processing()
+            log.info("Stop dialog skipped — dispatching pipeline with no name/context")
+            threading.Thread(
+                target=self._run_pipeline,
+                args=(mic_path, sys_path, session_dt, duration, None, None, None, tmp_dir),
+                daemon=True,
+            ).start()
+
+        open_stop_dialog(on_process=_on_process, on_skip=_on_skip)
 
     def _run_pipeline(
         self,
@@ -646,7 +640,7 @@ class MeetingRecorderApp(rumps.App):
         self._location_caption.title = self._short_location()
         items.append(None)
         items.append(self._location_caption)
-        items.append(rumps.MenuItem("Open Meetings Folder", callback=self.open_output_dir))
+        items.append(rumps.MenuItem("Open Meetings Folder ↗", callback=self.open_output_dir))
         items.append(rumps.MenuItem("Change Location…", callback=lambda _: self.open_prefs(_, focus_output_dir=True)))
 
         # clear() calls NSMenu.removeAllItems() which requires _menu to be non-None.
@@ -671,7 +665,7 @@ class MeetingRecorderApp(rumps.App):
         if degraded:
             main_item = rumps.MenuItem(label, callback=None)  # has submenu; callback never fires (#13)
             open_item = rumps.MenuItem(
-                "Open Note",
+                "Open Note ↗",
                 callback=lambda _, p=note_path: self._open_note_checked(p),
             )
             retry_item = rumps.MenuItem(
@@ -679,7 +673,7 @@ class MeetingRecorderApp(rumps.App):
                 callback=lambda _, p=note_path: self._reprocess_note(p),
             )
             reveal_item = rumps.MenuItem(
-                "Reveal in Finder",
+                "Reveal in Finder ↗",
                 callback=lambda _, p=note_path: self._reveal_in_finder(p),
             )
             main_item.update([open_item, retry_item, reveal_item])

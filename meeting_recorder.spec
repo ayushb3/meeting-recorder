@@ -40,6 +40,7 @@ a = Analysis(
         'ui',
         'ui.menu',
         'ui.settings_window',
+        'ui.stop_dialog',
         'config',
     ],
     hookspath=[],

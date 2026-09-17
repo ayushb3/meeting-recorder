@@ -25,14 +25,14 @@
 <text x="258.5" y="262" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← degraded — has submenu</text>
 <path d="M128,274 L128,290" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M128,290 L138,290" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="142" y="294" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Open Note</text>
+<text x="142" y="294" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Open Note ↗</text>
 <path d="M128,306 L128,322" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M128,322 L138,322" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <text x="142" y="326" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Retry Summary</text>
 <text x="234.5" y="326" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← re-runs pipeline</text>
 <path d="M128,338 L128,354" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M128,354 L138,354" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="142" y="358" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Reveal in Finder</text>
+<text x="142" y="358" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Reveal in Finder ↗</text>
 <path d="M72,370 L72,386" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,386 L82,386" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <text x="86" y="390" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="start">Earlier this week</text>
@@ -50,7 +50,7 @@
 <text x="237.0" y="486" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← location footer (non-clickable)</text>
 <path d="M72,498 L72,514" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,514 L82,514" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="518" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Open Meetings Folder</text>
+<text x="86" y="518" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Open Meetings Folder ↗</text>
 <path d="M72,530 L72,546" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,546 L82,546" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <text x="86" y="550" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Change Location…</text>
@@ -71,16 +71,16 @@
 <text x="86" y="678" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">— separator —</text>
 <path d="M72,690 L72,706" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,706 L82,706" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Start Ollama in Terminal</text>
-<text x="250.0" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama serve</text>
+<text x="86" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Start Ollama in Terminal ↗</text>
+<text x="263.0" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama serve</text>
 <path d="M72,722 L72,738" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,738 L82,738" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Pull Model…</text>
-<text x="165.5" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama pull</text>
+<text x="86" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Pull Model… ↗</text>
+<text x="178.5" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama pull</text>
 <path d="M72,754 L72,770" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,770 L82,770" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Re-check Now</text>
-<text x="172.0" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← async re-probe</text>
+<text x="86" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Refresh Ollama Status</text>
+<text x="230.5" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← async re-probe</text>
 <path d="M44,786 L44,802" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M44,802 L54,802" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <text x="58" y="806" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">— separator —</text>
