@@ -190,13 +190,13 @@ def test_find_notes_for_date_all_renamed(tmp_path):
 
     _write_meeting(wdir / "standup", date_str, "09:00", "Standup")
     _write_meeting(wdir / "q2-planning", date_str, "11:00", "Q2 Planning")
-    _write_meeting(wdir / "11-with-sven", date_str, "15:00", "1:1 With Sven")
+    _write_meeting(wdir / "11-with-alex", date_str, "15:00", "1:1 With Alex")
 
     results = find_notes_for_date(tmp_path, dt)
     assert len(results) == 3
     # Assert on parent dir names — the key point is slug folders are found
     parent_names = [note.parent.name for note in results]
-    assert parent_names == ["standup", "q2-planning", "11-with-sven"]
+    assert parent_names == ["standup", "q2-planning", "11-with-alex"]
 
 
 # ---------------------------------------------------------------------------

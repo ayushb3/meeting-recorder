@@ -20,12 +20,12 @@ def test_display_label_uses_frontmatter_title(tmp_path):
 def test_display_label_slug_with_timestamp_prefix(tmp_path):
     """Folder YYYY-MM-DD-HHhMM-<slug>: strip prefix, title-case the slug."""
     from ui.menu import display_label
-    folder = tmp_path / "2026-09-16-13h32-shared-service-onboarding-birva-1-1"
+    folder = tmp_path / "2026-09-16-13h32-shared-service-onboarding-alex-1-1"
     folder.mkdir(parents=True)
     note = folder / "meeting.md"
     note.write_text("---\ndate: 2026-09-16\ntime: 13:32\n---\n")
     entry = {"title": "", "path": note, "time": "13:32", "date": "2026-09-16"}
-    assert display_label(entry) == "Shared Service Onboarding Birva 1 1"
+    assert display_label(entry) == "Shared Service Onboarding Alex 1 1"
 
 
 def test_display_label_bare_timestamp_folder_with_h1(tmp_path):
