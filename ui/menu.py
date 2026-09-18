@@ -243,6 +243,14 @@ class MeetingRecorderApp(rumps.App):
         self._build_top_menu()
         self._set_idle()
 
+        # An accessory app has no menu bar, so ⌘X/⌘C/⌘V would reach nothing and
+        # no text field in this app could paste. Give them somewhere to dispatch.
+        try:
+            from ui.edit_menu import install_edit_menu  # noqa: PLC0415
+            install_edit_menu()
+        except Exception:
+            log.warning("Edit menu unavailable; clipboard shortcuts will not work")
+
         # Initial Meetings submenu population (sync — output_dir may not exist yet, that's fine)
         self._rebuild_meetings_menu()
 

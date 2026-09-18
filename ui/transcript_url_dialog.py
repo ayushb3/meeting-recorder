@@ -77,9 +77,10 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
         NSFont,
         NSMakeRect,
         NSTextField,
-        NSTitledWindowMask,
         NSView,
         NSWindow,
+        NSWindowStyleMaskClosable,
+        NSWindowStyleMaskTitled,
     )
     import objc
     from Foundation import NSObject
@@ -121,7 +122,7 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
     height = 210
     window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         NSMakeRect(0, 0, WIDTH, height),
-        NSTitledWindowMask,
+        NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
         NSBackingStoreBuffered,
         False,
     )

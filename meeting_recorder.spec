@@ -45,6 +45,7 @@ a = Analysis(
         # statically. Omitting one fails only when the menu item is clicked.
         'ui.transcript_url_dialog',
         'ui.import_recording_dialog',
+        'ui.edit_menu',
         'pipeline.importer',
         'config',
     ],
