@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -165,12 +166,131 @@ def _harvest(page) -> dict[int, tuple[str | None, str]]:
     return out
 
 
+def parse_timestamps(spec: str | None, duration: float | None = None) -> list[int]:
+    """'7:46,19:40' or '1:02:15' -> [466, 1180] seconds, sorted and deduplicated.
+
+    Raises ValueError on anything unparseable, or on a timestamp past *duration*
+    — seeking past the end silently yields the last frame for every such entry,
+    which looks like a working capture and is not.
+    """
+    if not spec:
+        return []
+    out: set[int] = set()
+    for raw in spec.split(","):
+        piece = raw.strip()
+        if not piece:
+            continue
+        parts = piece.split(":")
+        if not all(p.strip().isdigit() for p in parts) or not 1 <= len(parts) <= 3:
+            raise ValueError(f"Not a timestamp: {piece!r}. Use MM:SS, H:MM:SS or seconds.")
+        values = [int(p) for p in parts]
+        seconds = 0
+        for value in values:
+            seconds = seconds * 60 + value
+        if duration is not None and seconds > duration:
+            raise ValueError(
+                f"{piece} is past the end of the recording ({duration:.0f}s)."
+            )
+        out.add(seconds)
+    return sorted(out)
+
+
+def frame_filename(seconds: int) -> str:
+    """Name by timestamp, not ordinal — survives a re-run with different steps."""
+    minutes, secs = divmod(int(seconds), 60)
+    return f"frame-{minutes:02d}{secs:02d}.png"
+
+
+def interleave_frames(lines: list[str], frames: list[tuple[int, str]]) -> list[str]:
+    """Insert Obsidian embeds into the transcript at the points they belong to.
+
+    *frames* is (seconds, filename). A frame is emitted before the first
+    transcript line at or after its timestamp, so the note reads as
+    slide -> discussion -> slide. Frames past the last line land at the end.
+    """
+    if not frames:
+        return lines
+
+    def line_seconds(line: str) -> int | None:
+        match = re.match(r"\[(\d+):(\d\d)\]", line)
+        if not match:
+            return None
+        return int(match.group(1)) * 60 + int(match.group(2))
+
+    pending = sorted(frames)
+    out: list[str] = []
+    for line in lines:
+        current = line_seconds(line)
+        while pending and current is not None and pending[0][0] <= current:
+            _, name = pending.pop(0)
+            out.extend([f"![[{name}]]", ""])
+        out.append(line)
+    for _, name in pending:
+        out.extend(["", f"![[{name}]]"])
+    return out
+
+
 def _seek(page, seconds: float) -> None:
     page.evaluate(
         "t => { const v = document.querySelector('video');"
         " if (v) { v.pause(); v.currentTime = t; } }",
         seconds,
     )
+
+
+def _await_frame_ready(page, timeout_ms: int = 10_000) -> bool:
+    """Wait for the player's own readiness rather than guessing a delay.
+
+    After a seek the player may briefly show the previous frame; readyState >= 2
+    with seeking finished is the signal that the new one has decoded.
+    """
+    waited = 0
+    while waited < timeout_ms:
+        state = page.evaluate(
+            "() => { const v = document.querySelector('video');"
+            " return v ? {ready: v.readyState, seeking: v.seeking} : null; }"
+        )
+        if state and state["ready"] >= 2 and not state["seeking"]:
+            return True
+        page.wait_for_timeout(200)
+        waited += 200
+    return False
+
+
+def capture_frames(page, seconds_list: list[int], out_dir: Path, extra_settle_ms: int) -> list[tuple[int, str]]:
+    """Seek to each timestamp and screenshot the video element.
+
+    Returns (seconds, filename) for each frame written. The element screenshot
+    was verified to capture real content rather than a black rectangle; if that
+    ever changes, the caller should notice empty files rather than silence.
+    """
+    if not seconds_list:
+        return []
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    video = page.locator("video").first
+    captured: list[tuple[int, str]] = []
+
+    for seconds in seconds_list:
+        _seek(page, seconds)
+        if not _await_frame_ready(page):
+            print(f"    {seconds}s: player not ready, capturing anyway")
+        page.wait_for_timeout(extra_settle_ms)
+        name = frame_filename(seconds)
+        path = out_dir / name
+        try:
+            video.screenshot(path=str(path))
+        except Exception as exc:
+            print(f"    {seconds}s: capture failed — {exc}")
+            continue
+        if path.exists() and path.stat().st_size > 0:
+            captured.append((seconds, name))
+            minutes, secs = divmod(seconds, 60)
+            print(f"    [{minutes:02d}:{secs:02d}] {name}")
+        else:
+            print(f"    {seconds}s: wrote an empty file, skipping")
+
+    return captured
 
 
 def scrape(page, steps: int, settle_ms: int) -> tuple[dict[int, tuple[str | None, str]], int]:
@@ -233,8 +353,11 @@ def run(
     steps: int,
     settle_ms: int,
     login_timeout: int,
-) -> tuple[list[str], datetime | None]:
-    """Drive the browser and return (transcript_lines, recording_date)."""
+    frames_at: str | None = None,
+    frames_dir: Path | None = None,
+    capture_settle_ms: int = 400,
+) -> tuple[list[str], datetime | None, list[tuple[int, str]]]:
+    """Drive the browser and return (transcript_lines, recording_date, frames)."""
     try:
         from playwright.sync_api import sync_playwright  # noqa: PLC0415
     except ImportError as exc:
@@ -323,8 +446,30 @@ def run(
             print(f"  {len(lines)} lines ({skipped} transcription notice(s) skipped)")
 
             recorded_at = _recording_date(page)
+
+            frames: list[tuple[int, str]] = []
+            if frames_at:
+                duration = page.evaluate(
+                    "() => { const v = document.querySelector('video');"
+                    " return v ? v.duration : 0; }"
+                )
+                try:
+                    wanted = parse_timestamps(frames_at, duration)
+                except ValueError as exc:
+                    raise ScrapeError(str(exc)) from exc
+                if wanted and frames_dir is not None:
+                    print(f"  capturing {len(wanted)} frame(s)")
+                    frames = capture_frames(
+                        page, wanted, frames_dir, capture_settle_ms
+                    )
+                    if len(frames) < len(wanted):
+                        print(
+                            f"  WARNING: {len(wanted) - len(frames)} frame(s) "
+                            "could not be captured"
+                        )
+
             _seek(page, 0)
-            return lines, recorded_at
+            return lines, recorded_at, frames
         finally:
             ctx.close()
 
@@ -344,7 +489,13 @@ def _recording_date(page) -> datetime | None:
         return None
 
 
-def write_vault_note(lines: list[str], dt: datetime, meeting_name: str | None) -> int:
+def write_vault_note(
+    lines: list[str],
+    dt: datetime,
+    meeting_name: str | None,
+    frames: list[tuple[int, str]] | None = None,
+    frames_dir: Path | None = None,
+) -> int:
     """Summarise and write a note, mirroring the recorded-meeting pipeline."""
     repo_root = Path(__file__).parent.parent
     if str(repo_root) not in sys.path:
@@ -389,12 +540,32 @@ def write_vault_note(lines: list[str], dt: datetime, meeting_name: str | None) -
             f"stage: summarize\nerror: {warning}\n"
         )
 
+    # Move captured frames beside the note so Obsidian's embeds resolve, then
+    # interleave them into the transcript at the points they belong to.
+    note_lines = lines
+    if frames and frames_dir is not None:
+        import shutil  # noqa: PLC0415
+
+        landed: list[tuple[int, str]] = []
+        for seconds, name in frames:
+            source = frames_dir / name
+            if not source.exists():
+                continue
+            try:
+                shutil.copy2(source, session_dir / name)
+                landed.append((seconds, name))
+            except OSError as exc:
+                print(f"  could not place {name}: {exc}")
+        if landed:
+            note_lines = interleave_frames(lines, landed)
+            print(f"  {len(landed)} frame(s) placed in the session folder")
+
     try:
         note_path = write_note(
             dt=dt,
             duration_seconds=0,
             summary=summary,
-            transcript_lines=lines,
+            transcript_lines=note_lines,
             output_dir=session_dir,
             overwrite=True,
             meeting_name=meeting_name,
@@ -423,6 +594,14 @@ def main(argv: list[str] | None = None) -> int:
         "--login-timeout", type=int, default=300, help="Wait for the panel (default: 300)"
     )
     parser.add_argument("--date", help="Recording date as YYYY-MM-DD (overrides detection)")
+    parser.add_argument(
+        "--frames-at",
+        help="Capture screenshare frames at these times, e.g. 7:46,19:40,1:02:15",
+    )
+    parser.add_argument(
+        "--capture-settle-ms", type=int, default=400,
+        help="Extra wait after the player reports ready (default: 400)",
+    )
     args = parser.parse_args(argv)
 
     if not args.url.lower().startswith(("http://", "https://")):
@@ -435,7 +614,12 @@ def main(argv: list[str] | None = None) -> int:
         print("Note: neither --out nor --note given; printing to stdout only.\n")
 
     try:
-        lines, detected_date = run(args.url, args.steps, args.settle_ms, args.login_timeout)
+        frames_dir = Path(tempfile.mkdtemp(prefix='mr-frames-')) if args.frames_at else None
+        lines, detected_date, frames = run(
+            args.url, args.steps, args.settle_ms, args.login_timeout,
+            frames_at=args.frames_at, frames_dir=frames_dir,
+            capture_settle_ms=args.capture_settle_ms,
+        )
     except ScrapeError as exc:
         return _fail("SCRAPE", str(exc))
 
@@ -468,7 +652,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Could not detect the recording date, and the note's date decides which "
                 "day it files under.\n  Pass it explicitly: --date YYYY-MM-DD",
             )
-        return write_vault_note(lines, dt, args.name)
+        return write_vault_note(lines, dt, args.name, frames, frames_dir)
 
     return 0
 

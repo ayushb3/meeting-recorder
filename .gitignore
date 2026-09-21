@@ -15,3 +15,8 @@ build/
 
 # Generated at build time — records the checkout a bundle was built from
 _build_info.py
+
+# Captured meeting frames — never commit (screenshots of real meetings)
+frames/
+*.frames/
+frame-probe/
