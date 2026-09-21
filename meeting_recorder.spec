@@ -6,6 +6,13 @@ from pathlib import Path
 
 block_cipher = None
 
+# scripts/ and .venv/ are deliberately not bundled, but menu items that shell
+# out need to find them. A frozen app cannot derive the checkout from
+# __file__, so record where this build came from.
+_repo_root = Path(SPECPATH).resolve()
+_build_info = _repo_root / '_build_info.py'
+_build_info.write_text(f'REPO_ROOT = {str(_repo_root)!r}\n')
+
 a = Analysis(
     ['app.py'],
     pathex=[],
@@ -48,6 +55,7 @@ a = Analysis(
         'ui.edit_menu',
         'pipeline.importer',
         'config',
+        '_build_info',
     ],
     hookspath=[],
     hooksconfig={},

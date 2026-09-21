@@ -1,5 +1,6 @@
 # ui/menu.py
 import logging
+import os
 import re
 import shlex
 import shutil
@@ -33,6 +34,13 @@ log = logging.getLogger(__name__)
 # Validated characters for an Ollama model name — safe to embed in AppleScript.
 _SAFE_MODEL_RE = re.compile(r'^[A-Za-z0-9._:/@-]+$')
 
+# Written by the spec at build time so a frozen app can find the checkout
+# that produced it — scripts/ and .venv/ are never bundled.
+try:
+    from _build_info import REPO_ROOT as _BUILT_FROM_REPO  # noqa: PLC0415
+except ImportError:
+    _BUILT_FROM_REPO = None
+
 
 def _bundle_resource(rel_path: str) -> str:
     """Resolve a resource path that works in dev mode and inside the .app bundle."""
@@ -44,10 +52,34 @@ def _bundle_resource(rel_path: str) -> str:
 def _repo_path(rel_path: str) -> str:
     """Resolve a path in the source checkout, never inside the .app bundle.
 
-    For things that are deliberately not bundled — scripts/ and .venv/ — so a
-    frozen app resolves to the original checkout if one is alongside it, and
-    reports a missing file rather than silently looking in _MEIPASS.
+    For things deliberately not bundled — scripts/ and .venv/. Running from
+    source, __file__ is already in the checkout. Frozen, it is under _MEIPASS,
+    where scripts/ does not exist and never will, so the checkout has to be
+    found another way: an explicit override, then the usual locations.
+
+    Returns the first candidate that exists, else the source-relative path so
+    the caller reports a sensible missing-file error.
     """
+    candidates: list[Path] = []
+
+    override = os.environ.get("MEETING_RECORDER_REPO")
+    if override:
+        candidates.append(Path(override).expanduser())
+
+    if getattr(sys, "frozen", False):
+        # A frozen app cannot see the checkout from __file__, so try the
+        # recorded build location and the conventional spot.
+        candidates.extend([
+            Path(_BUILT_FROM_REPO) if _BUILT_FROM_REPO else None,
+            Path.home() / "Documents" / "Personal" / "meeting-recorder",
+        ])
+    else:
+        candidates.append(Path(__file__).resolve().parent.parent)
+
+    for base in candidates:
+        if base and (base / rel_path).exists():
+            return str(base / rel_path)
+
     return str(Path(__file__).resolve().parent.parent / rel_path)
 
 

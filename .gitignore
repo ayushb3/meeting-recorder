@@ -12,3 +12,6 @@ build/
 
 # AgentOps session artifacts
 .agents/
+
+# Generated at build time — records the checkout a bundle was built from
+_build_info.py
