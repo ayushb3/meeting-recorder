@@ -64,6 +64,11 @@ class Config:
     mic_threshold: int = 300
     ollama_prompt: str | None = None
     capture_method: str = "auto"
+    llm_provider: str = "ollama"
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_terms: str | None = None
+    llm_fallback_to_ollama: bool = True
 
 
 def load_config(path: Path) -> Config:
@@ -86,7 +91,22 @@ def load_config(path: Path) -> Config:
         mic_threshold=raw["processing"].get("mic_threshold", 300),
         ollama_prompt=raw.get("ollama", {}).get("prompt", None),
         capture_method=raw["audio"].get("capture_method", "auto"),
+        llm_provider=raw.get("llm", {}).get("provider", "ollama"),
+        llm_base_url=raw.get("llm", {}).get("base_url", "").strip(),
+        llm_model=raw.get("llm", {}).get("model", "").strip(),
+        llm_terms=raw.get("llm", {}).get("terms") or None,
+        llm_fallback_to_ollama=raw.get("llm", {}).get("fallback_to_ollama", True),
     )
+
+    if cfg.llm_provider not in ("ollama", "openai", "anthropic"):
+        raise ValueError(
+            f'[llm] provider must be "ollama", "openai" or "anthropic", '
+            f'but was {cfg.llm_provider!r}.'
+        )
+    if cfg.llm_provider != "ollama" and not (cfg.llm_base_url and cfg.llm_model):
+        raise ValueError(
+            f'[llm] provider = "{cfg.llm_provider}" needs both base_url and model.'
+        )
 
     if cfg.capture_method not in ("auto", "tap", "blackhole"):
         raise ValueError(

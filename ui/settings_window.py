@@ -82,6 +82,14 @@ def validate_settings(fields: dict) -> list[str]:
     if prompt.strip() and "{transcript}" not in prompt:
         errors.append("Ollama prompt must contain {transcript} if non-empty.")
 
+    provider = fields.get("llm_provider") or "ollama"
+    if provider != "ollama":
+        # load_config rejects these, and a config it rejects stops the app launching.
+        if not str(fields.get("llm_base_url") or "").strip():
+            errors.append(f"Base URL is required for the {provider} summarizer.")
+        if not str(fields.get("llm_model") or "").strip():
+            errors.append(f"Model is required for the {provider} summarizer.")
+
     try:
         min_sec = int(fields.get("min_recording_seconds", 0))
         if min_sec < 0:
@@ -113,8 +121,20 @@ def build_toml_text(fields: dict) -> str:
     emit the standard comments from config.template.toml so a saved file is
     at least as documented as the original template.
     """
+    def _control(s: str, keep: str) -> str:
+        # TOML basic strings reject raw control characters; \\uXXXX them.
+        return "".join(
+            c if c in keep or not (ord(c) < 0x20 or ord(c) == 0x7F) else f"\\u{ord(c):04x}"
+            for c in s
+        )
+
     def _escape(s: str) -> str:
-        return s.replace("\\", "\\\\").replace('"', '\\"')
+        return _control(s.replace("\\", "\\\\").replace('"', '\\"'), keep="\t")
+
+    def _escape_multiline(s: str) -> str:
+        # Backslashes first: a basic multi-line string treats them as escapes.
+        s = s.replace("\r\n", "\n").replace("\\", "\\\\").replace('"""', '""\\"')
+        return _control(s, keep="\t\n")
 
     output_dir = str(fields.get("output_dir", ""))
     system_device = _escape(str(fields.get("system_device", "")))
@@ -153,7 +173,7 @@ def build_toml_text(fields: dict) -> str:
     prompt = fields.get("ollama_prompt") or ""
     if prompt.strip():
         # Use multiline TOML string; escape any embedded triple-quote sequences
-        safe_prompt = prompt.replace('"""', '""\\\"')
+        safe_prompt = _escape_multiline(prompt)
         lines += [
             "# Optional custom prompt — must contain {transcript}",
             f'prompt = """\n{safe_prompt}\n"""',
@@ -169,6 +189,36 @@ def build_toml_text(fields: dict) -> str:
         "# Raise if you still hear bleed; lower if your own voice is being cut off.",
         f"mic_threshold = {mic_thr}",
     ]
+
+    # ---- [llm] section (only emitted when fields contain llm keys) ----
+    llm_provider = str(fields.get("llm_provider", "") or "").strip()
+    if llm_provider:
+        llm_base_url = _escape(str(fields.get("llm_base_url", "") or ""))
+        llm_model = _escape(str(fields.get("llm_model", "") or ""))
+        llm_fallback = "true" if fields.get("llm_fallback_to_ollama") else "false"
+
+        lines += [
+            "",
+            "[llm]",
+            "# provider: ollama | openai | anthropic",
+            f'provider = "{_escape(llm_provider)}"',
+            "# base_url for hosted providers — include the version segment",
+            "# e.g. https://api.openai.com/v1 or http://localhost:6655/openai/v1",
+            f'base_url = "{llm_base_url}"',
+            f'model = "{llm_model}"',
+            f"fallback_to_ollama = {llm_fallback}",
+            "# API key: never stored here — use the Keychain instead:",
+            f"# security add-generic-password -s MeetingRecorder -a llm-api-key -w",
+        ]
+
+        llm_terms = fields.get("llm_terms") or ""
+        if llm_terms.strip():
+            # Multi-line terms field — same triple-quote approach as prompt
+            safe_terms = _escape_multiline(str(llm_terms))
+            lines += [
+                "# Names and terms the AI should recognise (one per line or comma-separated)",
+                f'terms = """\n{safe_terms}\n"""',
+            ]
 
     return "\n".join(lines) + "\n"
 
@@ -474,6 +524,107 @@ def _open_settings_window_impl(app_instance, focus_output_dir: bool = False) -> 
     scroll_view.setDocumentView_(prompt_text_view)
     content.addSubview_(scroll_view)
 
+    # ---- Summarizer (LLM provider selection) ----
+    add_section_label("Summarizer")
+
+    y = next_y(24)
+    add_label("Provider", y, LABEL_W)
+    llm_provider_popup = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(CTRL_X, y, CTRL_W, 24))
+    for p in ("Ollama", "OpenAI-compatible", "Anthropic"):
+        llm_provider_popup.addItemWithTitle_(p)
+    # Map config value to display label
+    _provider_map = {"ollama": "Ollama", "openai": "OpenAI-compatible", "anthropic": "Anthropic"}
+    _provider_display = _provider_map.get(cfg.llm_provider, "Ollama")
+    llm_provider_popup.selectItemWithTitle_(_provider_display)
+    content.addSubview_(llm_provider_popup)
+
+    y = next_y(24)
+    add_label("Base URL", y, LABEL_W)
+    llm_base_url_field = NSTextField.alloc().initWithFrame_(NSMakeRect(CTRL_X, y, CTRL_W, 22))
+    llm_base_url_field.setStringValue_(str(cfg.llm_base_url or ""))
+    llm_base_url_field.setPlaceholderString_("http://localhost:6655/openai/v1")
+    content.addSubview_(llm_base_url_field)
+
+    y = next_y(24)
+    add_label("Model", y, LABEL_W)
+    # NSComboBox — free text always allowed; populated best-effort from list_models
+    try:
+        from AppKit import NSComboBox  # type: ignore
+        llm_model_combo = NSComboBox.alloc().initWithFrame_(NSMakeRect(CTRL_X, y, CTRL_W, 22))
+    except Exception:
+        # Fallback to plain text field if NSComboBox unavailable in test stubs
+        llm_model_combo = NSTextField.alloc().initWithFrame_(NSMakeRect(CTRL_X, y, CTRL_W, 22))
+    llm_model_combo.setStringValue_(str(cfg.llm_model or ""))
+    llm_model_combo.setPlaceholderString_("e.g. claude-sonnet-latest")
+    content.addSubview_(llm_model_combo)
+
+    # Background thread: populate model combo from live endpoint (best-effort)
+    def _populate_model_combo_bg(provider=cfg.llm_provider, base_url=cfg.llm_base_url):
+        try:
+            from summarizer.llm import list_models  # noqa: PLC0415
+            models = list_models(provider, base_url)
+            if models:
+                def _fill():
+                    try:
+                        llm_model_combo.addItemsWithObjectValues_(models)
+                    except Exception:
+                        pass  # combo may have been collected
+                try:
+                    from PyObjCTools import AppHelper as _AH  # noqa: PLC0415
+                    _AH.callAfter(_fill)
+                except Exception:
+                    pass  # not on macOS or not in event loop
+        except Exception:
+            log.debug("Could not populate model list", exc_info=True)
+
+    import threading as _threading
+    _threading.Thread(target=_populate_model_combo_bg, daemon=True).start()
+
+    y = next_y(90)
+    add_label("Names & terms", y + 68, LABEL_W)
+    terms_note = NSTextField.alloc().initWithFrame_(NSMakeRect(16, y + 46, LABEL_W - 4, 18))
+    terms_note.setStringValue_("One per line or comma-separated")
+    terms_note.setBezeled_(False)
+    terms_note.setDrawsBackground_(False)
+    terms_note.setEditable_(False)
+    terms_note.setSelectable_(False)
+    terms_note.setFont_(NSFont.systemFontOfSize_(10))
+    terms_note.setTextColor_(NSColor.tertiaryLabelColor())
+    content.addSubview_(terms_note)
+
+    terms_scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(CTRL_X, y, CTRL_W, 88))
+    terms_scroll.setHasVerticalScroller_(True)
+    terms_scroll.setHasHorizontalScroller_(False)
+    terms_scroll.setBorderType_(2)  # NSBezelBorder
+
+    llm_terms_text_view = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, CTRL_W - 16, 88))
+    llm_terms_text_view.setString_(cfg.llm_terms or "")
+    llm_terms_text_view.setFont_(NSFont.systemFontOfSize_(12))
+    terms_scroll.setDocumentView_(llm_terms_text_view)
+    content.addSubview_(terms_scroll)
+
+    y = next_y(24)
+    add_label("Fall back to Ollama", y, LABEL_W)
+    llm_fallback_checkbox = NSButton.alloc().initWithFrame_(NSMakeRect(CTRL_X, y, 24, 24))
+    llm_fallback_checkbox.setButtonType_(NSButtonTypeSwitch)
+    llm_fallback_checkbox.setTitle_("")
+    llm_fallback_checkbox.setState_(1 if cfg.llm_fallback_to_ollama else 0)
+    content.addSubview_(llm_fallback_checkbox)
+
+    # API key hint — never shown/stored in UI, only Keychain
+    y = next_y(18, gap=4)
+    keychain_hint = NSTextField.alloc().initWithFrame_(NSMakeRect(16, y, WINDOW_W - 32, 16))
+    keychain_hint.setStringValue_(
+        "API key: security add-generic-password -s MeetingRecorder -a llm-api-key -w"
+    )
+    keychain_hint.setBezeled_(False)
+    keychain_hint.setDrawsBackground_(False)
+    keychain_hint.setEditable_(False)
+    keychain_hint.setSelectable_(True)
+    keychain_hint.setFont_(NSFont.monospacedSystemFontOfSize_(10, 0))
+    keychain_hint.setTextColor_(NSColor.secondaryLabelColor())
+    content.addSubview_(keychain_hint)
+
     # ---- Processing ----
     add_section_label("Processing")
 
@@ -541,6 +692,12 @@ def _open_settings_window_impl(app_instance, focus_output_dir: bool = False) -> 
     delegate._keep_audio_checkbox = keep_audio_checkbox
     delegate._min_rec_field = min_rec_field
     delegate._low_disk_field = low_disk_field
+    # Summarizer fields
+    delegate._llm_provider_popup = llm_provider_popup
+    delegate._llm_base_url_field = llm_base_url_field
+    delegate._llm_model_combo = llm_model_combo
+    delegate._llm_terms_text_view = llm_terms_text_view
+    delegate._llm_fallback_checkbox = llm_fallback_checkbox
 
     choose_folder_btn.setTarget_(delegate)
     choose_folder_btn.setAction_("chooseFolderClicked:")
@@ -621,6 +778,17 @@ def _make_delegate_class():
             from config import USER_CONFIG_PATH, load_config  # type: ignore
             from AppKit import NSAlert  # type: ignore
 
+            # Map display label back to config value
+            _display_to_provider = {
+                "Ollama": "ollama",
+                "OpenAI-compatible": "openai",
+                "Anthropic": "anthropic",
+            }
+            provider_display = (
+                self._llm_provider_popup.titleOfSelectedItem() or "Ollama"
+            )
+            llm_provider_val = _display_to_provider.get(provider_display, "ollama")
+
             fields = {
                 "output_dir": self._output_dir_label.stringValue(),
                 "system_device": selected_device_value(
@@ -638,6 +806,12 @@ def _make_delegate_class():
                 "keep_audio": self._keep_audio_checkbox.state() == 1,
                 "min_recording_seconds": self._min_rec_field.stringValue(),
                 "low_disk_threshold_mb": self._low_disk_field.stringValue(),
+                # Summarizer
+                "llm_provider": llm_provider_val,
+                "llm_base_url": self._llm_base_url_field.stringValue(),
+                "llm_model": self._llm_model_combo.stringValue(),
+                "llm_terms": self._llm_terms_text_view.string() or "",
+                "llm_fallback_to_ollama": self._llm_fallback_checkbox.state() == 1,
             }
 
             errors = validate_settings(fields)

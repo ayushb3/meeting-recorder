@@ -232,7 +232,7 @@ def test_pipeline_degraded_result_summary_ok_false(tmp_path):
     assert result.success is True
     assert result.summary_ok is False
     assert result.warning is not None
-    assert "Ollama" in result.warning
+    assert "Summarizer unavailable" in result.warning
 
 
 def test_pipeline_degraded_marker_in_final_dir(tmp_path):

@@ -392,3 +392,175 @@ def test_build_toml_real_config_shape_roundtrip(tmp_path):
     # All standard comments present
     assert "sounddevice" in toml_text
     assert "RMS" in toml_text or "backwash" in toml_text
+
+
+# ---------------------------------------------------------------------------
+# build_toml_text — [llm] section round-trips
+# ---------------------------------------------------------------------------
+
+def _base_fields_with_llm(tmp_path, **overrides):
+    """Base fields including a minimal [llm] section."""
+    fields = _base_fields(tmp_path)
+    fields.update({
+        "llm_provider": "ollama",
+        "llm_base_url": "",
+        "llm_model": "",
+        "llm_terms": "",
+        "llm_fallback_to_ollama": True,
+    })
+    fields.update(overrides)
+    return fields
+
+
+def test_build_toml_llm_ollama_roundtrip(tmp_path):
+    """[llm] provider=ollama round-trips; no base_url/model required."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields_with_llm(tmp_path, llm_provider="ollama")
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    assert parsed["llm"]["provider"] == "ollama"
+    assert parsed["llm"]["fallback_to_ollama"] is True
+
+
+def test_build_toml_llm_openai_roundtrip(tmp_path):
+    """[llm] provider=openai with base_url and model round-trips."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields_with_llm(
+        tmp_path,
+        llm_provider="openai",
+        llm_base_url="https://api.openai.com/v1",
+        llm_model="gpt-4o",
+        llm_fallback_to_ollama=False,
+    )
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    assert parsed["llm"]["provider"] == "openai"
+    assert parsed["llm"]["base_url"] == "https://api.openai.com/v1"
+    assert parsed["llm"]["model"] == "gpt-4o"
+    assert parsed["llm"]["fallback_to_ollama"] is False
+
+
+def test_build_toml_llm_anthropic_roundtrip(tmp_path):
+    """[llm] provider=anthropic with a proxy base_url round-trips."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields_with_llm(
+        tmp_path,
+        llm_provider="anthropic",
+        llm_base_url="http://localhost:6655/anthropic",
+        llm_model="claude-sonnet-latest",
+        llm_fallback_to_ollama=True,
+    )
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    assert parsed["llm"]["provider"] == "anthropic"
+    assert parsed["llm"]["base_url"] == "http://localhost:6655/anthropic"
+    assert parsed["llm"]["model"] == "claude-sonnet-latest"
+    assert parsed["llm"]["fallback_to_ollama"] is True
+
+
+def test_build_toml_llm_terms_roundtrip(tmp_path):
+    """[llm] terms field (multi-line) serialises and parses back intact."""
+    from ui.settings_window import build_toml_text
+    terms = "Alice Smith\nBob Jones\nProject Hydra"
+    fields = _base_fields_with_llm(tmp_path, llm_provider="openai",
+                                    llm_base_url="https://api.openai.com/v1",
+                                    llm_model="gpt-4o", llm_terms=terms)
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    # Value may have leading/trailing newline from triple-quote block — strip for comparison
+    assert "Alice Smith" in parsed["llm"]["terms"]
+    assert "Project Hydra" in parsed["llm"]["terms"]
+
+
+def test_build_toml_llm_terms_blank_omitted(tmp_path):
+    """When terms is blank the key should be absent from the [llm] table."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields_with_llm(tmp_path, llm_provider="openai",
+                                    llm_base_url="https://api.openai.com/v1",
+                                    llm_model="gpt-4o", llm_terms="")
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    assert "terms" not in parsed["llm"]
+
+
+def test_build_toml_llm_special_chars_in_url(tmp_path):
+    """base_url containing characters that need TOML escaping round-trips."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields_with_llm(
+        tmp_path,
+        llm_provider="openai",
+        llm_base_url='http://host/path?a="quoted"',
+        llm_model="m",
+    )
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    assert parsed["llm"]["base_url"] == 'http://host/path?a="quoted"'
+
+
+def test_build_toml_no_llm_section_when_provider_empty(tmp_path):
+    """When llm_provider is absent/empty the [llm] table is not emitted."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields(tmp_path)  # no llm_* keys
+    toml_text = build_toml_text(fields)
+    parsed = tomllib.loads(toml_text)
+    assert "llm" not in parsed
+
+
+def test_build_toml_llm_keychain_hint_in_output(tmp_path):
+    """The Keychain security command hint must appear as a comment."""
+    from ui.settings_window import build_toml_text
+    fields = _base_fields_with_llm(tmp_path, llm_provider="openai",
+                                    llm_base_url="https://api.openai.com/v1",
+                                    llm_model="gpt-4o")
+    toml_text = build_toml_text(fields)
+    assert "MeetingRecorder" in toml_text
+    assert "llm-api-key" in toml_text
+    # Still parses cleanly
+    tomllib.loads(toml_text)
+
+
+@pytest.mark.parametrize("key,field", [("prompt", "ollama_prompt"), ("terms", "llm_terms")])
+def test_multiline_fields_survive_backslashes_and_triple_quotes(key, field):
+    """A backslash or \"\"\" in a multi-line field must not produce an unloadable config."""
+    import tomllib
+    from ui.settings_window import build_toml_text
+
+    value = 'C:\\path {transcript} say """hi""" \\n not a newline\nline two'
+    fields = {
+        "output_dir": "/tmp/x", "system_device": "d", "mic_device": "m",
+        "whisper_model": "/m", "whisper_binary": "/b", "ollama_model": "gemma",
+        "ollama_host": "http://localhost:11434", "keep_audio": True,
+        "min_recording_seconds": 30, "low_disk_threshold_mb": 500, "mic_threshold": 300,
+        "llm_provider": "openai", "llm_base_url": "http://p/v1", "llm_model": "gpt-5",
+        "llm_fallback_to_ollama": True, field: value,
+    }
+    loaded = tomllib.loads(build_toml_text(fields))
+    table = loaded["ollama"] if key == "prompt" else loaded["llm"]
+    assert table[key].strip("\n") == value
+
+
+def test_validate_rejects_hosted_provider_without_url_or_model(tmp_path):
+    """Saving these would write a config load_config rejects, and the app would not launch."""
+    from ui.settings_window import validate_settings
+
+    errors = validate_settings({"output_dir": str(tmp_path), "llm_provider": "openai"})
+    assert any("Base URL" in e for e in errors)
+    assert any("Model" in e for e in errors)
+    assert validate_settings({"output_dir": str(tmp_path), "llm_provider": "ollama"}) == []
+
+
+def test_single_line_field_with_pasted_newline_still_loads():
+    import tomllib
+    from ui.settings_window import build_toml_text
+
+    fields = {
+        "output_dir": "/tmp/x", "system_device": "d", "mic_device": "m",
+        "whisper_model": "/m", "whisper_binary": "/b", "ollama_model": "gemma",
+        "ollama_host": "http://localhost:11434", "keep_audio": True,
+        "min_recording_seconds": 30, "low_disk_threshold_mb": 500, "mic_threshold": 300,
+        "llm_provider": "openai", "llm_base_url": "http://p/v1\n", "llm_model": "gpt-5\r",
+        "llm_fallback_to_ollama": True, "llm_terms": "a\r\nb\x07",
+    }
+    loaded = tomllib.loads(build_toml_text(fields))
+    assert loaded["llm"]["base_url"] == "http://p/v1\n"
+    assert loaded["llm"]["terms"].strip("\n") == "a\nb\x07"

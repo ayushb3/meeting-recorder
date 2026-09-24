@@ -29,7 +29,7 @@ curl -L -o /opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v
 
 > The model path goes into your config later, so keep a note of where it landed.
 
-### Ollama — local LLM for summaries
+### Ollama — local LLM for summaries (default, offline)
 
 Download the Ollama desktop app from [ollama.com](https://ollama.com), install it, then pull a model:
 
@@ -44,6 +44,8 @@ ollama serve
 ```
 
 Leave it running in the background. It idles at 50–100 MB of RAM and only loads the model when a request arrives.
+
+> **Using a hosted API instead?** If you prefer to use an OpenAI-compatible endpoint or the Anthropic API, Ollama is optional. You can skip this step and configure the `[llm]` table in config.toml (or Settings → Summarizer) after first launch. Store your API key in the Keychain with `security add-generic-password -s MeetingRecorder -a llm-api-key -w`. See the [README](../README.md#summarizer-configuration) for details.
 
 ---
 
@@ -140,7 +142,7 @@ Steps:
 
 ![Root menu in idle state, showing Start Recording, Meetings submenu, green Ollama status indicator, Settings, and Quit](screenshots/menu-idle.png)
 
-1. Make sure Ollama is running. The menu bar icon shows **🟢 Ollama** when it is ready. If it shows 🔴, click **Ollama ▸ Start Ollama in Terminal** to start it.
+1. Make sure your summarizer is ready. If using Ollama (default), the menu bar icon shows **🟢 Ollama**; if it shows 🔴, click **Ollama ▸ Start Ollama in Terminal** to start it. If using a hosted API, the icon shows **🟢 Summarizer** when the endpoint is reachable and the API key is present.
 2. Click the menu bar icon, then **● Start Recording**.
 3. The icon changes and the item shows **■ Stop Recording — MM:SS** counting up.
 4. Have your meeting.
@@ -176,8 +178,14 @@ The new tap path is the reason colleagues who remember the old setup instruction
 
 ---
 
-## Optional — importing meetings you did not record
+## Optional — importing meetings you did not record or attend
 
-Everything above covers recording meetings you attend. For a Teams/Stream recording made by someone else, **Import Transcript from Stream… ↗** takes the recording URL and scrapes the transcript into a note.
+### Importing a local audio or video file
+
+**Import Recording…** in the menu accepts any audio or video file your Mac can decode (mp3, m4a, mp4, mov, wav, …). It runs the same transcription and summarisation pipeline as a live recording. The original file is never moved.
+
+### Importing a Teams/Stream transcript
+
+For a recording made by someone else, **Import Transcript from Stream… ↗** takes the recording URL and scrapes the transcript into a note, with real speaker names.
 
 It needs a one-time `playwright` install, a source checkout, and about ten seconds of your attention per run — the sign-in and opening the transcript panel cannot be automated. Full setup in [Importing Stream transcripts](stream-transcripts.md).

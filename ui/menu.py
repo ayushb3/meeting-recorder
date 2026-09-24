@@ -26,6 +26,8 @@ except ImportError:  # non-macOS or stripped test environment
 from config import Config
 from pipeline.processor import run_pipeline
 from recorder.audio import AudioRecorder
+from summarizer.llm import LLMSettings, LLMStatus
+from summarizer.llm import check_status as llm_check_status
 from summarizer.ollama import OllamaStatus, check_status
 from notes.writer import list_notes
 
@@ -235,8 +237,9 @@ class MeetingRecorderApp(rumps.App):
         self._session_dt: datetime | None = None
         self._pending_stop: tuple | None = None
 
-        # Cached Ollama status — probed on a background thread, never on draw
-        self._ollama_status: OllamaStatus | None = None
+        # Cached summarizer status — probed on a background thread, never on draw.
+        # Typed as OllamaStatus | LLMStatus | None to cover both probe paths.
+        self._ollama_status: OllamaStatus | LLMStatus | None = None
         self._ollama_status_lock = threading.Lock()
 
         # Hero action item
@@ -512,7 +515,8 @@ class MeetingRecorderApp(rumps.App):
             self._set_processing()
             log.info(
                 "Dispatching pipeline: duration=%ds name=%s context=%s",
-                duration, meeting_name, llm_context,
+                duration, meeting_name,
+                f"{len(llm_context)} chars" if llm_context else "none",
             )
             threading.Thread(
                 target=self._run_pipeline,
@@ -558,6 +562,7 @@ class MeetingRecorderApp(rumps.App):
                 ollama_host=self.config.ollama_host,
                 keep_audio=self.config.keep_audio,
                 ollama_prompt=self.config.ollama_prompt,
+                llm=LLMSettings.from_config(self.config),
             )
             if result.success:
                 if error_file and result.summary_ok:
@@ -582,7 +587,7 @@ class MeetingRecorderApp(rumps.App):
                     else:
                         self._notify(
                             "Meeting Recorder", "Note saved (summary unavailable)",
-                            result.warning or "Ollama was not reachable. Open Meetings menu to retry.",
+                            result.warning or "No LLM was reachable. Open Meetings menu to retry.",
                         )
                 self._call_on_main(_ui_success)
                 log.info("Pipeline complete: %s", result.note_path)
@@ -638,8 +643,17 @@ class MeetingRecorderApp(rumps.App):
     # ---------------------------------------------------------------- Ollama status
 
     def _probe_ollama_and_refresh_ui(self):
-        """Run a blocking Ollama probe on a background thread, then marshal UI update to main."""
-        status = check_status(self.config.ollama_model, self.config.ollama_host)
+        """Run a blocking summarizer probe on a background thread, then marshal UI update to main.
+
+        When the configured provider is ollama (the default) the existing
+        OllamaStatus path is used so Ollama-specific detail (host, model) is
+        preserved in the submenu.  For hosted providers (openai / anthropic) we
+        use the provider-neutral llm_check_status which returns LLMStatus.
+        """
+        if self.config.llm_provider == "ollama":
+            status = check_status(self.config.ollama_model, self.config.ollama_host)
+        else:
+            status = llm_check_status(LLMSettings.from_config(self.config))
         with self._ollama_status_lock:
             self._ollama_status = status
         # Marshal UI mutation to main thread (issue #2)
@@ -650,20 +664,36 @@ class MeetingRecorderApp(rumps.App):
         self._rebuild_meetings_menu()
         threading.Thread(target=self._probe_ollama_and_refresh_ui, daemon=True).start()
 
-    def _update_ollama_ui(self, status: OllamaStatus):
-        """Update Ollama submenu and root item title. MUST be called on the main thread."""
-        if status.ready:
-            self._ollama_root_item.title = "🟢 Ollama"
-            self._ollama_status_item.title = "🟢 Running"
-            self._ollama_detail_item.title = f"{status.model} · {status.host}"
-        elif status.reachable:
-            self._ollama_root_item.title = "🟡 Ollama"
-            self._ollama_status_item.title = "🟡 Running — model not pulled"
-            self._ollama_detail_item.title = f"{status.model} not found at {status.host}"
+    def _update_ollama_ui(self, status):
+        """Update summarizer submenu and root item title. MUST be called on the main thread.
+
+        Accepts either OllamaStatus (when provider=ollama) or LLMStatus (hosted
+        providers). The two types share .ready and differ in their detail fields.
+        """
+        if isinstance(status, LLMStatus):
+            # Hosted provider (openai / anthropic)
+            if status.ready:
+                self._ollama_root_item.title = "🟢 Summarizer"
+                self._ollama_status_item.title = "🟢 Ready"
+                self._ollama_detail_item.title = status.detail
+            else:
+                self._ollama_root_item.title = "🔴 Summarizer"
+                self._ollama_status_item.title = f"🔴 {status.label}"
+                self._ollama_detail_item.title = status.detail
         else:
-            self._ollama_root_item.title = "🔴 Ollama"
-            self._ollama_status_item.title = "🔴 Not running"
-            self._ollama_detail_item.title = f"No server at {status.host}"
+            # OllamaStatus — preserve existing Ollama-specific detail
+            if status.ready:
+                self._ollama_root_item.title = "🟢 Ollama"
+                self._ollama_status_item.title = "🟢 Running"
+                self._ollama_detail_item.title = f"{status.model} · {status.host}"
+            elif status.reachable:
+                self._ollama_root_item.title = "🟡 Ollama"
+                self._ollama_status_item.title = "🟡 Running — model not pulled"
+                self._ollama_detail_item.title = f"{status.model} not found at {status.host}"
+            else:
+                self._ollama_root_item.title = "🔴 Ollama"
+                self._ollama_status_item.title = "🔴 Not running"
+                self._ollama_detail_item.title = f"No server at {status.host}"
 
     # ---------------------------------------------------------------- meetings submenu
 
@@ -852,10 +882,11 @@ class MeetingRecorderApp(rumps.App):
             open_transcript_url_dialog,
         )
 
-        def _on_submit(url: str):
+        def _on_submit(url: str, name: str | None = None,
+                       frames_at: str | None = None, context: str | None = None):
             if not looks_like_stream_url(url):
                 log.info("URL does not look like a Stream recording; running anyway")
-            self._launch_transcript_scrape(url)
+            self._launch_transcript_scrape(url, name=name, frames_at=frames_at, context=context)
 
         open_transcript_url_dialog(on_submit=_on_submit)
 
@@ -887,15 +918,17 @@ class MeetingRecorderApp(rumps.App):
 
         from ui.import_recording_dialog import open_import_recording_dialog  # noqa: PLC0415
 
-        def _on_import(confirmed_dt: datetime, meeting_name: str | None):
+        def _on_import(confirmed_dt: datetime, meeting_name: str | None,
+                       llm_context: str | None = None):
             self._set_processing()
             log.info(
-                "Dispatching import pipeline: file=%s dt=%s name=%s",
+                "Dispatching import pipeline: file=%s dt=%s name=%s context=%s",
                 source_path.name, confirmed_dt, meeting_name,
+                f"{len(llm_context)} chars" if llm_context else "none",
             )
             threading.Thread(
                 target=self._run_import_pipeline,
-                args=(source_path, confirmed_dt, meeting_name),
+                args=(source_path, confirmed_dt, meeting_name, llm_context),
                 daemon=True,
             ).start()
 
@@ -914,6 +947,7 @@ class MeetingRecorderApp(rumps.App):
         source_path: Path,
         session_dt: datetime,
         meeting_name: str | None,
+        llm_context: str | None = None,
     ):
         """Background thread: prepare audio, then call run_pipeline with single_source."""
         from pipeline.importer import prepare_audio, get_duration_seconds  # noqa: PLC0415
@@ -954,6 +988,7 @@ class MeetingRecorderApp(rumps.App):
                     session_dt=session_dt,
                     duration_seconds=duration_seconds,
                     meeting_name=meeting_name,
+                    llm_context=llm_context,
                     output_dir=self.config.output_dir,
                     whisper_binary=self.config.whisper_binary,
                     whisper_model=self.config.whisper_model,
@@ -962,6 +997,7 @@ class MeetingRecorderApp(rumps.App):
                     keep_audio=self.config.keep_audio,
                     ollama_prompt=self.config.ollama_prompt,
                     single_source=audio_for_pipeline,
+                    llm=LLMSettings.from_config(self.config),
                 )
 
             # tmp_dir is cleaned up by TemporaryDirectory context manager at this point
@@ -987,7 +1023,7 @@ class MeetingRecorderApp(rumps.App):
                     else:
                         self._notify(
                             "Meeting Recorder", "Import complete (summary unavailable)",
-                            result.warning or "Ollama was not reachable. Open Meetings menu to retry.",
+                            result.warning or "No LLM was reachable. Open Meetings menu to retry.",
                         )
                 self._call_on_main(_ui_success)
                 log.info("Import pipeline complete: %s", result.note_path)
@@ -1011,12 +1047,25 @@ class MeetingRecorderApp(rumps.App):
                 self._rebuild_meetings_menu()
             self._call_on_main(_ui_error)
 
-    def _launch_transcript_scrape(self, url: str):
+    def _launch_transcript_scrape(
+        self,
+        url: str,
+        name: str | None = None,
+        frames_at: str | None = None,
+        context: str | None = None,
+    ):
         """Open Terminal running the scraper against *url*.
 
-        The URL is written into a temporary script rather than interpolated into
-        the AppleScript string: it is arbitrary pasted text, and `do script`
-        would otherwise hand it to the shell as code.
+        The URL and optional arguments are written into a temporary shell script
+        rather than interpolated into the AppleScript `do script` string: they
+        are arbitrary user input, and `do script` would otherwise hand them to
+        the shell as code.  Each argument is passed through shlex.quote before
+        being embedded in the script body.
+
+        Optional kwargs map to the CLI flags:
+            name      → --name
+            frames_at → --frames-at
+            context   → --context
         """
         script_path = _repo_path("scripts/stream_transcript.py")
         if not Path(script_path).exists():
@@ -1031,11 +1080,20 @@ class MeetingRecorderApp(rumps.App):
         if not Path(python).exists():
             python = sys.executable
 
+        # Build the optional flag fragments; each value is independently quoted.
+        extra_flags = ""
+        if name:
+            extra_flags += f" --name {shlex.quote(name)}"
+        if frames_at:
+            extra_flags += f" --frames-at {shlex.quote(frames_at)}"
+        if context:
+            extra_flags += f" --context {shlex.quote(context)}"
+
         runner = Path(tempfile.mkdtemp(prefix="mr-scrape-")) / "run.sh"
         runner.write_text(
             "#!/bin/sh\n"
             f"cd {shlex.quote(str(Path(script_path).parent.parent))}\n"
-            f"{shlex.quote(python)} {shlex.quote(script_path)} {shlex.quote(url)} --note\n"
+            f"{shlex.quote(python)} {shlex.quote(script_path)} {shlex.quote(url)} --note{extra_flags}\n"
             'status=$?\n'
             'echo\n'
             'if [ $status -ne 0 ]; then echo "Scrape failed — see the error above."; fi\n'

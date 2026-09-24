@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from notes.writer import week_folder, write_note
-from summarizer.ollama import OllamaUnavailableError, suggest_title, summarize
+from summarizer.llm import LLMSettings, SummaryUnavailableError, suggest_title, summarize
 from transcriber.whisper import (
     TranscriptionError,
     _segments_to_lines,
@@ -51,7 +51,11 @@ def run_pipeline(
     llm_context: str | None = None,
     ollama_prompt: str | None = None,
     single_source: Path | None = None,
+    llm: LLMSettings | None = None,
 ) -> PipelineResult:
+    if llm is None:
+        llm = LLMSettings(ollama_model=ollama_model, ollama_host=ollama_host, prompt=ollama_prompt)
+
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
     # Use a timestamped placeholder until we know the final name
@@ -119,27 +123,24 @@ def run_pipeline(
             log.error("Transcription failed: %s", e)
             return write_error("transcribe", str(e))
 
-    # Summarize (non-fatal if Ollama down)
+    # Summarize (non-fatal if no LLM is reachable)
     _ollama_unavailable = False
     _ollama_warning: str | None = None
     try:
-        log.info("Summarizing with Ollama: model=%s", ollama_model)
-        summary = summarize(
-            transcript_lines, ollama_model, ollama_host,
-            context=llm_context, custom_template=ollama_prompt,
-        )
+        log.info("Summarizing with %s", llm.label)
+        summary = summarize(transcript_lines, llm, context=llm_context)
         log.info("Summary done (%d chars)", len(summary))
 
         # If no user-supplied name, ask the LLM to suggest one from the summary
         if not meeting_name:
-            meeting_name = suggest_title(summary, ollama_model, ollama_host)
+            meeting_name = suggest_title(summary, llm)
             if meeting_name:
                 log.info("LLM suggested title: %r", meeting_name)
-    except OllamaUnavailableError as e:
-        log.warning("Ollama unavailable: %s — saving note without summary", e)
-        summary = "⚠ Summary unavailable — Ollama was not reachable during processing."
+    except SummaryUnavailableError as e:
+        log.warning("Summarizer unavailable: %s — saving note without summary", e)
+        summary = "⚠ Summary unavailable — no LLM was reachable during processing."
         _ollama_unavailable = True
-        _ollama_warning = f"Ollama unavailable: {e}. Summary was not generated."
+        _ollama_warning = f"Summarizer unavailable: {e}. Summary was not generated."
 
     # Rename session dir now that we have a final name (B6: atomic slug reservation).
     # We must never overwrite an existing dir, including empty ones — POSIX rename(2)
@@ -179,7 +180,7 @@ def run_pipeline(
                 except Exception:
                     pass
 
-    # Write a summarize.error marker when Ollama was unavailable (B2).
+    # Write a summarize.error marker when no LLM was reachable (B2).
     # Must happen AFTER the rename so the marker lands in the final dir.
     # Wrapped so a filesystem error (ENOSPC, read-only) never kills the note write.
     if _ollama_unavailable:

@@ -26,6 +26,7 @@ yourself. This script never sees, stores or types a password.
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 import tempfile
@@ -356,8 +357,8 @@ def run(
     frames_at: str | None = None,
     frames_dir: Path | None = None,
     capture_settle_ms: int = 400,
-) -> tuple[list[str], datetime | None, list[tuple[int, str]]]:
-    """Drive the browser and return (transcript_lines, recording_date, frames)."""
+) -> tuple[list[str], datetime | None, list[tuple[int, str]], int]:
+    """Drive the browser and return (transcript_lines, recording_date, frames, duration_s)."""
     try:
         from playwright.sync_api import sync_playwright  # noqa: PLC0415
     except ImportError as exc:
@@ -447,12 +448,15 @@ def run(
 
             recorded_at = _recording_date(page)
 
+            duration = page.evaluate(
+                "() => { const v = document.querySelector('video');"
+                " return v ? v.duration : 0; }"
+            )
+            # A live stream or unloaded metadata reports Infinity or NaN.
+            if not isinstance(duration, (int, float)) or not math.isfinite(duration):
+                duration = 0
             frames: list[tuple[int, str]] = []
             if frames_at:
-                duration = page.evaluate(
-                    "() => { const v = document.querySelector('video');"
-                    " return v ? v.duration : 0; }"
-                )
                 try:
                     wanted = parse_timestamps(frames_at, duration)
                 except ValueError as exc:
@@ -469,7 +473,7 @@ def run(
                         )
 
             _seek(page, 0)
-            return lines, recorded_at, frames
+            return lines, recorded_at, frames, int(duration)
         finally:
             ctx.close()
 
@@ -495,6 +499,8 @@ def write_vault_note(
     meeting_name: str | None,
     frames: list[tuple[int, str]] | None = None,
     frames_dir: Path | None = None,
+    duration_seconds: int = 0,
+    context: str | None = None,
 ) -> int:
     """Summarise and write a note, mirroring the recorded-meeting pipeline."""
     repo_root = Path(__file__).parent.parent
@@ -503,8 +509,9 @@ def write_vault_note(
 
     from config import USER_CONFIG_PATH, load_config  # noqa: PLC0415
     from notes.writer import week_folder, write_note  # noqa: PLC0415
-    from summarizer.ollama import (  # noqa: PLC0415
-        OllamaUnavailableError,
+    from summarizer.llm import (  # noqa: PLC0415
+        LLMSettings,
+        SummaryUnavailableError,
         suggest_title,
         summarize,
     )
@@ -519,15 +526,14 @@ def write_vault_note(
 
     warning = None
     try:
-        print("Summarising...")
-        summary = summarize(
-            lines, cfg.ollama_model, cfg.ollama_host, custom_template=cfg.ollama_prompt
-        )
+        llm = LLMSettings.from_config(cfg)
+        print(f"Summarising with {llm.label}...")
+        summary = summarize(lines, llm, context=context)
         if not meeting_name:
-            meeting_name = suggest_title(summary, cfg.ollama_model, cfg.ollama_host)
-    except OllamaUnavailableError as exc:
-        summary = "⚠ Summary unavailable — Ollama was not reachable during processing."
-        warning = f"Ollama unavailable: {exc}. Summary was not generated."
+            meeting_name = suggest_title(summary, llm)
+    except SummaryUnavailableError as exc:
+        summary = "⚠ Summary unavailable — no LLM was reachable during processing."
+        warning = f"Summarizer unavailable: {exc}. Summary was not generated."
         print(f"  {warning}")
 
     timestamp = dt.strftime("%Y-%m-%d-%Hh%M")
@@ -563,7 +569,7 @@ def write_vault_note(
     try:
         note_path = write_note(
             dt=dt,
-            duration_seconds=0,
+            duration_seconds=duration_seconds,
             summary=summary,
             transcript_lines=note_lines,
             output_dir=session_dir,
@@ -595,6 +601,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--date", help="Recording date as YYYY-MM-DD (overrides detection)")
     parser.add_argument(
+        "--context",
+        help="Attendees, project names, terms — passed to the summarizer",
+    )
+    parser.add_argument(
         "--frames-at",
         help="Capture screenshare frames at these times, e.g. 7:46,19:40,1:02:15",
     )
@@ -615,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         frames_dir = Path(tempfile.mkdtemp(prefix='mr-frames-')) if args.frames_at else None
-        lines, detected_date, frames = run(
+        lines, detected_date, frames, duration = run(
             args.url, args.steps, args.settle_ms, args.login_timeout,
             frames_at=args.frames_at, frames_dir=frames_dir,
             capture_settle_ms=args.capture_settle_ms,
@@ -652,7 +662,10 @@ def main(argv: list[str] | None = None) -> int:
                 "Could not detect the recording date, and the note's date decides which "
                 "day it files under.\n  Pass it explicitly: --date YYYY-MM-DD",
             )
-        return write_vault_note(lines, dt, args.name, frames, frames_dir)
+        return write_vault_note(
+            lines, dt, args.name, frames, frames_dir,
+            duration_seconds=duration, context=args.context,
+        )
 
     return 0
 

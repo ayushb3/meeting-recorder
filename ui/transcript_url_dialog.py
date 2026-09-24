@@ -14,6 +14,7 @@ event loop.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Callable
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,10 @@ log = logging.getLogger(__name__)
 # Module-level strong references so the window and delegate survive GC.
 _active_window = None
 _active_delegate = None
+
+# Pattern for a single timestamp piece: seconds (e.g. 466), M:SS, or H:MM:SS
+# Same rule as parse_timestamps in scripts/stream_transcript.py: 1-3 digit groups.
+_TIMESTAMP_RE = re.compile(r'^\d+(?::\d+){0,2}$')
 
 
 # ---------------------------------------------------------------------------
@@ -51,6 +56,36 @@ def looks_like_stream_url(url: str) -> bool:
     return "stream.aspx" in lowered or "sharepoint.com" in lowered
 
 
+def normalise_frames_at(raw: str | None) -> str | None:
+    """Normalise a frames-at string from the dialog field.
+
+    Accepts a comma-separated list of timestamps, each of which may be:
+      - plain seconds:   ``466``
+      - M:SS:            ``7:46``
+      - H:MM:SS:         ``1:07:46``
+
+    Returns None when the input is empty or blank (treated as not provided).
+    Raises ValueError with a descriptive message when any piece fails to
+    match the expected format.
+
+    The return value has spaces stripped and empty pieces dropped so it is
+    safe to pass directly to ``--frames-at``.
+    """
+    if not raw:
+        return None
+    pieces = [p.strip() for p in raw.split(",")]
+    pieces = [p for p in pieces if p]  # drop empty segments
+    if not pieces:
+        return None
+    bad = [p for p in pieces if not _TIMESTAMP_RE.match(p)]
+    if bad:
+        raise ValueError(
+            f"Invalid timestamp(s): {', '.join(bad)!r}. "
+            "Use seconds (e.g. 466), M:SS (e.g. 7:46), or H:MM:SS (e.g. 1:07:46)."
+        )
+    return ",".join(pieces)
+
+
 # ---------------------------------------------------------------------------
 # AppKit window — only imported/instantiated on macOS inside the real app
 # ---------------------------------------------------------------------------
@@ -61,8 +96,13 @@ def _clear_active_refs() -> None:
     _active_delegate = None
 
 
-def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
-    """Show the URL dialog. Calls *on_submit(url)* with a normalised URL.
+def open_transcript_url_dialog(
+    on_submit: Callable[[str, str | None, str | None, str | None], None],
+) -> None:
+    """Show the URL dialog. Calls *on_submit(url, name, frames_at, context)*.
+
+    *url* is a normalised http(s) URL.  *name*, *frames_at*, and *context* are
+    optional strings (None when blank / not provided by the user).
 
     Cancelling, or submitting something that is not an http(s) URL, calls
     nothing — the dialog simply closes.
@@ -76,6 +116,8 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
         NSColor,
         NSFont,
         NSMakeRect,
+        NSScrollView,
+        NSTextView,
         NSTextField,
         NSView,
         NSWindow,
@@ -84,6 +126,7 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
     )
     import objc
     from Foundation import NSObject
+    from ui.stop_dialog import normalise_text_input  # reuse strip-and-None helper
 
     PAD = 20
     WIDTH = 460
@@ -96,30 +139,71 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
                 return None
             self._on_submit = callback
             self._url_field = None
+            self._name_field = None
+            self._frames_field = None
+            self._context_text_view = None
+            self._error_lbl = None
             self._window = None
             return self
 
-        def setField_window_(self, field, window):
-            self._url_field = field
-            self._window = window
+        def setWidgets_(self, widgets):
+            """Set all widget references in one call."""
+            self._url_field = widgets["url_field"]
+            self._name_field = widgets["name_field"]
+            self._frames_field = widgets["frames_field"]
+            self._context_text_view = widgets["context_text_view"]
+            self._error_lbl = widgets["error_lbl"]
+            self._window = widgets["window"]
 
         def scrapeClicked_(self, sender):
-            raw = self._url_field.stringValue() if self._url_field else ""
-            url = normalise_url(raw)
+            raw_url = self._url_field.stringValue() if self._url_field else ""
+            url = normalise_url(raw_url)
+            if not url:
+                if raw_url.strip():
+                    if self._error_lbl:
+                        self._error_lbl.setStringValue_("Please enter an https:// URL.")
+                    log.warning("Ignoring input that is not an http(s) URL")
+                return
+
+            # Validate frames-at before closing
+            raw_frames = self._frames_field.stringValue() if self._frames_field else ""
+            try:
+                frames_at = normalise_frames_at(raw_frames)
+            except ValueError as exc:
+                if self._error_lbl:
+                    self._error_lbl.setStringValue_(str(exc))
+                return
+
+            name = normalise_text_input(
+                self._name_field.stringValue() if self._name_field else ""
+            )
+            context = normalise_text_input(
+                self._context_text_view.string() if self._context_text_view else ""
+            )
+
             if self._window:
                 self._window.close()
             _clear_active_refs()
-            if url and self._on_submit:
-                self._on_submit(url)
-            elif raw.strip():
-                log.warning("Ignoring input that is not an http(s) URL")
+            if self._on_submit:
+                self._on_submit(url, name, frames_at, context)
 
         def cancelClicked_(self, sender):
             if self._window:
                 self._window.close()
             _clear_active_refs()
 
-    height = 210
+    # ---- Layout (top-down, y decrements as we add rows) ----
+    #
+    # URL field:        24 px
+    # Title field:      22 px
+    # Frames-at field:  22 px
+    # Context label:    16 px
+    # Context scroll:   60 px
+    # Error label:      18 px
+    # Explainer text:   54 px
+    # Buttons row:      30 px
+    # + PAD top + PAD bottom + gaps
+    height = 390
     window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         NSMakeRect(0, 0, WIDTH, height),
         NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
@@ -131,7 +215,26 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
 
     content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, WIDTH, height))
 
+    GAP = 8
     y = height - PAD - 20
+
+    def _static_label(text, ypos, h=16, font_size=11, bold=False, color=None):
+        lbl = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, ypos, INNER_W, h))
+        lbl.setStringValue_(text)
+        lbl.setBezeled_(False)
+        lbl.setDrawsBackground_(False)
+        lbl.setEditable_(False)
+        lbl.setSelectable_(False)
+        if bold:
+            lbl.setFont_(NSFont.boldSystemFontOfSize_(font_size))
+        else:
+            lbl.setFont_(NSFont.systemFontOfSize_(font_size))
+        if color is not None:
+            lbl.setTextColor_(color)
+        content.addSubview_(lbl)
+        return lbl
+
+    # ---- Recording URL ----
     heading = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 20))
     heading.setStringValue_("Recording URL")
     heading.setBezeled_(False)
@@ -140,14 +243,81 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
     heading.setFont_(NSFont.boldSystemFontOfSize_(13))
     content.addSubview_(heading)
 
-    y -= 28
+    y -= GAP + 24
     url_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 24))
     url_field.setPlaceholderString_("Paste the URL from the browser address bar")
     url_field.setFont_(NSFont.systemFontOfSize_(12))
     content.addSubview_(url_field)
 
-    y -= 74
-    explainer = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 66))
+    # ---- Title (optional) ----
+    y -= GAP + 16
+    _static_label("Title (optional)", y,
+                  color=NSColor.secondaryLabelColor())
+
+    y -= GAP + 22
+    name_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 22))
+    name_field.setPlaceholderString_("Leave blank — the AI will name it from the transcript")
+    name_field.setFont_(NSFont.systemFontOfSize_(12))
+    content.addSubview_(name_field)
+
+    # ---- Frames at (optional) ----
+    y -= GAP + 16
+    _static_label("Frames at (optional)", y,
+                  color=NSColor.secondaryLabelColor())
+
+    y -= GAP + 22
+    frames_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 22))
+    frames_field.setPlaceholderString_("7:46, 19:40 — optional")
+    frames_field.setFont_(NSFont.systemFontOfSize_(12))
+    content.addSubview_(frames_field)
+
+    # ---- Context (optional multi-line) ----
+    CONTEXT_H = 60
+    y -= GAP + 16
+    _static_label("Context for AI summary (optional)", y,
+                  color=NSColor.secondaryLabelColor())
+
+    y -= GAP + CONTEXT_H
+    scroll_view = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, CONTEXT_H))
+    scroll_view.setHasVerticalScroller_(True)
+    scroll_view.setHasHorizontalScroller_(False)
+    scroll_view.setBorderType_(2)  # NSBezelBorder
+
+    context_text_view = NSTextView.alloc().initWithFrame_(
+        NSMakeRect(0, 0, INNER_W - 16, CONTEXT_H)
+    )
+    context_text_view.setFont_(NSFont.systemFontOfSize_(12))
+    context_text_view.setString_("")
+    scroll_view.setDocumentView_(context_text_view)
+    content.addSubview_(scroll_view)
+
+    # Placeholder overlay for the NSTextView
+    placeholder_lbl = NSTextField.alloc().initWithFrame_(
+        NSMakeRect(PAD + 5, y + CONTEXT_H - 18, INNER_W - 10, 18)
+    )
+    placeholder_lbl.setStringValue_("Attendees, project names, terms — optional")
+    placeholder_lbl.setBezeled_(False)
+    placeholder_lbl.setDrawsBackground_(False)
+    placeholder_lbl.setEditable_(False)
+    placeholder_lbl.setSelectable_(False)
+    placeholder_lbl.setFont_(NSFont.systemFontOfSize_(12))
+    placeholder_lbl.setTextColor_(NSColor.placeholderTextColor())
+    content.addSubview_(placeholder_lbl)
+
+    # ---- Error label (hidden until validation fails) ----
+    y -= GAP + 18
+    error_lbl = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 16))
+    error_lbl.setStringValue_("")
+    error_lbl.setBezeled_(False)
+    error_lbl.setDrawsBackground_(False)
+    error_lbl.setEditable_(False)
+    error_lbl.setFont_(NSFont.systemFontOfSize_(11))
+    error_lbl.setTextColor_(NSColor.systemRedColor())
+    content.addSubview_(error_lbl)
+
+    # ---- Explainer ----
+    y -= GAP + 54
+    explainer = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 50))
     explainer.setStringValue_(
         "Opens Terminal and a Chrome window. Sign in if prompted, then open the "
         "recording's transcript panel — the scrape needs it visible and cannot do "
@@ -161,7 +331,14 @@ def open_transcript_url_dialog(on_submit: Callable[[str], None]) -> None:
     content.addSubview_(explainer)
 
     delegate = _URLDialogDelegate.alloc().initWithCallback_(on_submit)
-    delegate.setField_window_(url_field, window)
+    delegate.setWidgets_({
+        "url_field": url_field,
+        "name_field": name_field,
+        "frames_field": frames_field,
+        "context_text_view": context_text_view,
+        "error_lbl": error_lbl,
+        "window": window,
+    })
 
     y = PAD
     scrape_button = NSButton.alloc().initWithFrame_(NSMakeRect(WIDTH - PAD - 140, y, 140, 30))

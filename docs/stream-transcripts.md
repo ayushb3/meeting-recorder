@@ -38,10 +38,19 @@ browser more kindly than a generic automation build.
 
 ### From the menu
 
-**Import Transcript from Stream… ↗** → paste the recording URL → **Scrape Transcript**.
+**Import Transcript from Stream… ↗** → fill in the dialog → **Scrape Transcript**.
 
-Terminal opens and runs the scrape where you can watch it. The `↗` means it leaves the app, the
-same as the Ollama items.
+The dialog fields:
+
+| Field | Details |
+|---|---|
+| **Recording URL** | Paste the URL from the browser address bar. |
+| **Title** (optional) | Meeting title. Leave blank to let the LLM suggest one. |
+| **Frames at** (optional) | Comma-separated timestamps (e.g. `7:46, 19:40`). A screenshot of the screenshare is captured at each timestamp and embedded in the note. Accepts plain seconds (e.g. `466`), M:SS, or H:MM:SS. |
+| **Context for AI summary** (optional) | Attendees, project names, technical terms. |
+
+Terminal opens and runs the scrape where you can watch it. The `↗` means it leaves the app,
+the same as the Ollama items.
 
 ### From the command line
 
@@ -58,8 +67,12 @@ Quote the URL — Stream URLs contain `&`, and an unquoted one gets mangled by t
 | `--name TITLE` | Set the meeting title (otherwise the LLM suggests one) |
 | `--date YYYY-MM-DD` | Recording date, if it cannot be detected from the page |
 | `--steps N` | Seek steps across the timeline (default 50) |
+| `--frames-at TIMES` | Capture screenshare screenshots at comma-separated timestamps and embed them in the note (e.g. `7:46,19:40,1:02:15`) |
+| `--context TEXT` | Context passed to the summariser (attendees, terms, etc.) |
 
 With neither `--out` nor `--note`, the transcript prints to stdout.
+
+The note's frontmatter includes a `duration:` field (e.g. `duration: 74m`) derived from the video length detected on the page.
 
 ---
 
@@ -120,6 +133,20 @@ are loud and specific by design.
 
 If sign-in fails with an `AADSTS` code, Conditional Access is refusing the automated browser.
 No change to this script fixes that — the code is quotable to IT as-is.
+
+---
+
+## Tip: extracting frames from a downloaded video
+
+If you have downloaded the recording as a video file (rather than using the Stream page), you can extract frames manually with ffmpeg and then reference the timestamps with `--frames-at` when you run the scraper against the Stream URL. For example, to grab one frame every 10 seconds:
+
+```bash
+ffmpeg -i recording.mp4 -vf "fps=1/10" frame-%04d.png
+```
+
+Look at the generated images to find timestamps worth highlighting, then pass those to `--frames-at` (or the **Frames at** field in the dialog).
+
+Note that the **Import Recording…** path (local file import) does not capture screenshare frames itself — `--frames-at` is only available on the Stream scrape path, which has access to the video playhead.
 
 ---
 

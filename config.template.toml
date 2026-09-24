@@ -40,6 +40,26 @@ host = "http://localhost:11434"
 # {transcript}
 # """
 
+[llm]
+# Which model writes the summary.
+#   "ollama"    — local Ollama, using [ollama] model/host above (offline, the default)
+#   "openai"    — any OpenAI-compatible Chat Completions API
+#   "anthropic" — the Anthropic Messages API
+# For "openai"/"anthropic", base_url is the API root including the version, e.g.
+#   https://api.openai.com/v1, https://api.anthropic.com/v1, or a local gateway such
+#   as http://localhost:6655/openai/v1.
+# The API key is NOT stored here. Put it in the macOS Keychain once:
+#   security add-generic-password -s MeetingRecorder -a llm-api-key -w
+# (it prompts for the key), or set MEETING_RECORDER_LLM_KEY for scripts.
+provider = "ollama"
+base_url = ""
+model = ""
+# Names and terms the transcript often gets wrong — sent with every summary so the
+# model spells them right. Comma-separated or one per line.
+terms = ""
+# If the hosted model cannot be reached (offline, off VPN), summarize with Ollama.
+fallback_to_ollama = true
+
 [processing]
 keep_audio = true
 min_recording_seconds = 30

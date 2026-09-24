@@ -4,7 +4,11 @@ from dataclasses import dataclass
 import requests
 
 
-class OllamaUnavailableError(Exception):
+class SummaryUnavailableError(Exception):
+    """No configured LLM produced a summary."""
+
+
+class OllamaUnavailableError(SummaryUnavailableError):
     pass
 
 

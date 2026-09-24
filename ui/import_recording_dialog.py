@@ -7,6 +7,9 @@ confirm it or type a corrected one before the import pipeline is dispatched.
 The meeting name field is optional; when blank, Ollama will suggest one from
 the transcript (same behaviour as the Stop dialog).
 
+An optional Context field (multi-line) mirrors the Stop dialog — attendees,
+project names, terms the AI should recognise.
+
 All AppKit code runs on the main thread (enforced by callers via _call_on_main).
 Pure helper functions at module level are fully unit-testable without an AppKit
 event loop.
@@ -79,7 +82,7 @@ def _clear_active_refs() -> None:
 def open_import_recording_dialog(
     default_dt: datetime,
     filename: str,
-    on_import: Callable[[datetime, str | None], None],
+    on_import: Callable[[datetime, str | None, str | None], None],
     on_cancel: Callable[[], None],
 ) -> None:
     """Show the import confirmation dialog on the current (main) thread.
@@ -87,8 +90,9 @@ def open_import_recording_dialog(
     *default_dt* is the file's mtime, pre-filled into the date/time field.
     *filename* is shown in the window subtitle so the user knows which file.
 
-    *on_import* is called with ``(confirmed_dt, meeting_name_or_None)`` when
-    the user clicks Import.  *on_cancel* is called if they cancel/close.
+    *on_import* is called with ``(confirmed_dt, meeting_name_or_None,
+    llm_context_or_None)`` when the user clicks Import.  *on_cancel* is called
+    if they cancel/close.
     """
     try:
         _open_import_recording_dialog_impl(default_dt, filename, on_import, on_cancel)
@@ -100,7 +104,7 @@ def open_import_recording_dialog(
 def _open_import_recording_dialog_impl(
     default_dt: datetime,
     filename: str,
-    on_import: Callable[[datetime, str | None], None],
+    on_import: Callable[[datetime, str | None, str | None], None],
     on_cancel: Callable[[], None],
 ) -> None:
     from AppKit import (  # type: ignore
@@ -109,6 +113,8 @@ def _open_import_recording_dialog_impl(
         NSBackingStoreBuffered,
         NSWindowStyleMaskTitled,
         NSWindowStyleMaskClosable,
+        NSScrollView,
+        NSTextView,
         NSTextField,
         NSButton,
         NSFont,
@@ -117,13 +123,17 @@ def _open_import_recording_dialog_impl(
     )
     from Foundation import NSObject  # type: ignore
     import objc  # type: ignore
+    from ui.stop_dialog import normalise_text_input  # reuse strip-and-None helper
 
     WINDOW_W = 460
-    WINDOW_H = 270
     PAD = 24
     GAP = 8
     INNER_W = WINDOW_W - PAD * 2
+    CONTEXT_H = 72
 
+    # Window height: title bar + filename + dt label + dt field + error +
+    # title label + title field + context label + context scroll + buttons + padding
+    WINDOW_H = 390
     style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
     window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         NSMakeRect(0, 0, WINDOW_W, WINDOW_H),
@@ -193,6 +203,40 @@ def _open_import_recording_dialog_impl(
     title_field.setFont_(NSFont.systemFontOfSize_(13))
     content.addSubview_(title_field)
 
+    # ---- Context field (multi-line, mirrors stop_dialog) ----
+    y -= GAP * 2 + 16
+    _label("Context for AI summary (optional)", PAD, y, INNER_W, 16,
+           font_size=11, color=NSColor.secondaryLabelColor())
+
+    y -= GAP + CONTEXT_H
+    scroll_view = NSScrollView.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, CONTEXT_H))
+    scroll_view.setHasVerticalScroller_(True)
+    scroll_view.setHasHorizontalScroller_(False)
+    scroll_view.setBorderType_(2)  # NSBezelBorder
+    scroll_view.setAutoresizingMask_(0)
+
+    context_text_view = NSTextView.alloc().initWithFrame_(
+        NSMakeRect(0, 0, INNER_W - 16, CONTEXT_H)
+    )
+    context_text_view.setFont_(NSFont.systemFontOfSize_(13))
+    context_text_view.setTextColor_(NSColor.labelColor())
+    context_text_view.setString_("")
+    scroll_view.setDocumentView_(context_text_view)
+    content.addSubview_(scroll_view)
+
+    # Placeholder overlay — hidden once user starts typing
+    placeholder_lbl = NSTextField.alloc().initWithFrame_(
+        NSMakeRect(PAD + 5, y + CONTEXT_H - 18, INNER_W - 10, 18)
+    )
+    placeholder_lbl.setStringValue_("e.g. Attendees, project names, technical terms")
+    placeholder_lbl.setBezeled_(False)
+    placeholder_lbl.setDrawsBackground_(False)
+    placeholder_lbl.setEditable_(False)
+    placeholder_lbl.setSelectable_(False)
+    placeholder_lbl.setFont_(NSFont.systemFontOfSize_(13))
+    placeholder_lbl.setTextColor_(NSColor.placeholderTextColor())
+    content.addSubview_(placeholder_lbl)
+
     # ---- Buttons ----
     BTN_H = 28
     BTN_W = 90
@@ -220,6 +264,8 @@ def _open_import_recording_dialog_impl(
     delegate._window = window
     delegate._dt_field = dt_field
     delegate._title_field = title_field
+    delegate._context_text_view = context_text_view
+    delegate._placeholder_lbl = placeholder_lbl
     delegate._error_lbl = error_lbl
     delegate._on_import = on_import
     delegate._on_cancel = on_cancel
@@ -229,6 +275,7 @@ def _open_import_recording_dialog_impl(
     import_btn.setTarget_(delegate)
     import_btn.setAction_("importClicked:")
     window.setDelegate_(delegate)
+    context_text_view.setDelegate_(delegate)
 
     global _active_window, _active_delegate
     _active_window = window
@@ -243,6 +290,7 @@ def _make_delegate_class():
     """Create (once) the ObjC delegate class for the Import Recording dialog."""
     import objc  # type: ignore
     from Foundation import NSObject  # type: ignore
+    from ui.stop_dialog import normalise_text_input  # reuse strip-and-None helper
 
     try:
         existing = objc.lookUpClass("MRImportRecordingDelegate")
@@ -263,16 +311,26 @@ def _make_delegate_class():
             raw_title = self._title_field.stringValue() if self._title_field else ""
             meeting_name = raw_title.strip() or None
 
+            llm_context = normalise_text_input(
+                self._context_text_view.string() if self._context_text_view else ""
+            )
+
             self._error_lbl.setStringValue_("")
-            self._dispatch(confirmed_dt=confirmed_dt, meeting_name=meeting_name, cancelled=False)
+            self._dispatch(confirmed_dt=confirmed_dt, meeting_name=meeting_name,
+                           llm_context=llm_context, cancelled=False)
 
         def cancelClicked_(self, sender):
-            self._dispatch(confirmed_dt=None, meeting_name=None, cancelled=True)
+            self._dispatch(confirmed_dt=None, meeting_name=None, llm_context=None, cancelled=True)
 
         def windowWillClose_(self, notification):
-            self._dispatch(confirmed_dt=None, meeting_name=None, cancelled=True)
+            self._dispatch(confirmed_dt=None, meeting_name=None, llm_context=None, cancelled=True)
 
-        def _dispatch(self, confirmed_dt, meeting_name, cancelled: bool):
+        # NSTextViewDelegate — hide placeholder when text is entered
+        def textDidChange_(self, notification):
+            text = self._context_text_view.string() or ""
+            self._placeholder_lbl.setHidden_(bool(text.strip()))
+
+        def _dispatch(self, confirmed_dt, meeting_name, llm_context, cancelled: bool):
             # Guard against double-fire (window close + button click)
             if self._on_import is None and self._on_cancel is None:
                 return
@@ -289,6 +347,6 @@ def _make_delegate_class():
                     on_cancel()
             else:
                 if on_import and confirmed_dt is not None:
-                    on_import(confirmed_dt, meeting_name)
+                    on_import(confirmed_dt, meeting_name, llm_context)
 
     return MRImportRecordingDelegate
