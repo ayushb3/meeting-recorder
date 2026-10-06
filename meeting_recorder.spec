@@ -43,6 +43,7 @@ a = Analysis(
         'notes',
         'notes.writer',
         'notes.frames',
+        'notes.vault',
         'pipeline',
         'pipeline.processor',
         'ui',

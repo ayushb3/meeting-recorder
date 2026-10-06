@@ -564,3 +564,36 @@ def test_single_line_field_with_pasted_newline_still_loads():
     loaded = tomllib.loads(build_toml_text(fields))
     assert loaded["llm"]["base_url"] == "http://p/v1\n"
     assert loaded["llm"]["terms"].strip("\n") == "a\nb\x07"
+
+
+# ---------------------------------------------------------------------------
+# Settings with no controls survive a save
+# ---------------------------------------------------------------------------
+
+def test_vault_and_prompt_file_survive_a_save(tmp_path):
+    import tomllib
+    from ui.settings_window import build_toml_text, preserved_config_fields
+
+    original = tmp_path / "config.toml"
+    original.write_text(
+        '[llm]\nprovider = "ollama"\nprompt_file = "~/private/prompt.txt"\n'
+        '[vault]\nroot = "~/vault"\ndaily_notes_to_read = 3\nwrite_daily_note = true\n'
+        'sections = ["Today", "Active Projects"]\n'
+    )
+    fields = {
+        "output_dir": "/x", "system_device": "a", "mic_device": "b",
+        "whisper_model": "m", "whisper_binary": "b", "ollama_model": "o",
+        "ollama_host": "h", "keep_audio": True, "min_recording_seconds": 30,
+        "low_disk_threshold_mb": 500, "mic_threshold": 300,
+        "llm_provider": "ollama", "ollama_prompt": "stale copy {transcript}",
+    }
+    fields.update(preserved_config_fields(original))
+
+    saved = tomllib.loads(build_toml_text(fields))
+
+    assert saved["vault"] == {
+        "root": "~/vault", "daily_notes_to_read": 3, "write_daily_note": True,
+        "sections": ["Today", "Active Projects"],
+    }
+    assert saved["llm"]["prompt_file"] == "~/private/prompt.txt"
+    assert "prompt" not in saved["ollama"]

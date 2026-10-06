@@ -171,7 +171,10 @@ def build_toml_text(fields: dict) -> str:
     ]
 
     prompt = fields.get("ollama_prompt") or ""
-    if prompt.strip():
+    # A prompt_file outranks the inline prompt at load time, so writing the
+    # window's copy of it back would only leave a stale duplicate of a prompt the
+    # user deliberately keeps elsewhere.
+    if prompt.strip() and not fields.get("llm_prompt_file"):
         # Use multiline TOML string; escape any embedded triple-quote sequences
         safe_prompt = _escape_multiline(prompt)
         lines += [
@@ -207,6 +210,10 @@ def build_toml_text(fields: dict) -> str:
             f'base_url = "{llm_base_url}"',
             f'model = "{llm_model}"',
             f"fallback_to_ollama = {llm_fallback}",
+            *(
+                [f'prompt_file = "{_escape(str(fields["llm_prompt_file"]))}"']
+                if fields.get("llm_prompt_file") else []
+            ),
             "# API key: never stored here — use the Keychain instead:",
             f"# security add-generic-password -s MeetingRecorder -a llm-api-key -w",
         ]
@@ -220,7 +227,47 @@ def build_toml_text(fields: dict) -> str:
                 f'terms = """\n{safe_terms}\n"""',
             ]
 
+    # [vault] has no controls in this window, but a save rewrites the whole file,
+    # so carry the user's section through rather than silently deleting it.
+    vault = fields.get("vault")
+    if isinstance(vault, dict) and vault:
+        lines += ["", "[vault]"]
+        for key, value in vault.items():
+            if not isinstance(key, str) or not key.replace("_", "").isalnum():
+                continue
+            if isinstance(value, bool):
+                lines.append(f"{key} = {'true' if value else 'false'}")
+            elif isinstance(value, int):
+                lines.append(f"{key} = {value}")
+            elif isinstance(value, list):
+                items = ", ".join(f'"{_escape(str(v))}"' for v in value)
+                lines.append(f"{key} = [{items}]")
+            else:
+                lines.append(f'{key} = "{_escape(str(value))}"')
+
     return "\n".join(lines) + "\n"
+
+
+def preserved_config_fields(path: Path) -> dict:
+    """Settings this window has no controls for, read from the existing file.
+
+    Returns ``{"vault": {...}, "llm_prompt_file": "..."}`` with only the keys
+    present, so they can be merged into the fields before ``build_toml_text``.
+    """
+    import tomllib
+
+    try:
+        with open(path, "rb") as fh:
+            raw = tomllib.load(fh)
+    except (OSError, ValueError):
+        return {}
+    out: dict = {}
+    if isinstance(raw.get("vault"), dict) and raw["vault"]:
+        out["vault"] = raw["vault"]
+    prompt_file = raw.get("llm", {}).get("prompt_file")
+    if prompt_file:
+        out["llm_prompt_file"] = prompt_file
+    return out
 
 
 def atomic_save_config(path: Path, toml_text: str) -> None:
@@ -813,6 +860,7 @@ def _make_delegate_class():
                 "llm_terms": self._llm_terms_text_view.string() or "",
                 "llm_fallback_to_ollama": self._llm_fallback_checkbox.state() == 1,
             }
+            fields.update(preserved_config_fields(USER_CONFIG_PATH))
 
             errors = validate_settings(fields)
             if errors:

@@ -563,6 +563,7 @@ class MeetingRecorderApp(rumps.App):
                 keep_audio=self.config.keep_audio,
                 ollama_prompt=self.config.ollama_prompt,
                 llm=LLMSettings.from_config(self.config),
+                vault=self.config.vault,
             )
             if result.success:
                 if error_file and result.summary_ok:
@@ -1015,6 +1016,7 @@ class MeetingRecorderApp(rumps.App):
                     ollama_prompt=self.config.ollama_prompt,
                     single_source=audio_for_pipeline,
                     llm=LLMSettings.from_config(self.config),
+                    vault=self.config.vault,
                     frames=frames or None,
                     frames_dir=frames_dir if frames else None,
                 )

@@ -521,6 +521,11 @@ def write_vault_note(
         sys.path.insert(0, str(repo_root))
 
     from config import USER_CONFIG_PATH, load_config  # noqa: PLC0415
+    from notes.vault import (  # noqa: PLC0415
+        log_to_daily_note,
+        prepare_context,
+        strip_unknown_links,
+    )
     from notes.writer import week_folder, write_note  # noqa: PLC0415
     from summarizer.llm import (  # noqa: PLC0415
         LLMSettings,
@@ -541,7 +546,10 @@ def write_vault_note(
     try:
         llm = LLMSettings.from_config(cfg)
         print(f"Summarising with {llm.label}...")
-        summary = summarize(lines, llm, context=context)
+        summary_context, vault_ctx = prepare_context(cfg.vault, context, dt.date())
+        summary = summarize(lines, llm, context=summary_context)
+        if vault_ctx is not None:
+            summary = strip_unknown_links(summary, vault_ctx.allowed_links)
         if not meeting_name:
             meeting_name = suggest_title(summary, llm)
     except SummaryUnavailableError as exc:
@@ -582,6 +590,12 @@ def write_vault_note(
         return _fail("WRITE_NOTE", str(exc))
 
     print(f"\nNote written: {note_path}")
+    if cfg.vault is not None:
+        try:
+            if log_to_daily_note(cfg.vault, note_path, meeting_name or session_dir.name, dt):
+                print("  Logged in the daily note")
+        except Exception as exc:  # write-back must never fail a written note
+            print(f"  Could not log to the daily note: {exc}")
     return 0
 
 

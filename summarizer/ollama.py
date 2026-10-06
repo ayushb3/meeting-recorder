@@ -97,7 +97,8 @@ Bullet list of distinct topics discussed.
 Bullet list of decisions made. If none, write "None recorded."
 
 ## Action Items
-For each action item: - **Person** — what they will do (deadline if stated)
+For each action item, one checkbox line: - [ ] **Person** — what they will do (deadline if stated)
+Use "Unassigned" when no one took it on. Do not turn ideas, wishes or general discussion into action items.
 If no action items were stated, write "None recorded."
 
 ## Notable Quotes
