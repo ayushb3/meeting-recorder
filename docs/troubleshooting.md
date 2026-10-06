@@ -54,14 +54,14 @@ Use `python app.py` only for menu and pipeline development work where you do not
 
 ![Ollama submenu in the not-running state: red dot, Not running status, no server message at localhost:11434, and action items](screenshots/ollama-red.png)
 
-**Cause:** The Ollama server is not running.
+**Cause:** The Ollama server is not running. (If you are using a hosted API instead of Ollama, see [Hosted summarizer: endpoint unreachable](#hosted-summarizer-endpoint-unreachable--fell-back-to-ollama) below.)
 
 **Fix:**
 1. Click **Ollama ▸ Start Ollama in Terminal ↗**. A Terminal window opens running `ollama serve`. The app re-probes automatically after a few seconds.
 2. Alternatively, run `ollama serve` yourself in a terminal or use the Ollama desktop app (which starts the server automatically on login).
 3. Once the icon turns 🟢, any pending summaries can be retried (see below).
 
-Recording is never blocked by Ollama. You can record at any time regardless of Ollama's state; only the summary step requires it.
+Recording is never blocked by the summarizer. You can record at any time regardless of its state; only the summary step requires it.
 
 ---
 
@@ -69,7 +69,7 @@ Recording is never blocked by Ollama. You can record at any time regardless of O
 
 **Symptom:** The note exists and has a transcript, but the **TL;DR**, **Topics Covered**, **Key Decisions**, and **Action Items** sections are empty or contain a placeholder. The Meetings menu shows ⚠ before the meeting name.
 
-**Cause:** Ollama was unreachable or returned an error during the pipeline run.
+**Cause:** The summarizer (Ollama or a hosted API) was unreachable or returned an error during the pipeline run.
 
 **Fix:**
 1. Make sure Ollama is running (🟢 in the menu).
@@ -178,3 +178,73 @@ Note: this entire issue does not apply on macOS 14.2+ because the Core Audio tap
 2. Check whether whisper.cpp is installed and working: run `whisper-cli --help` in a terminal.
 3. In the Meetings submenu, find the failed session (it will be listed under "Failed (no note)" or with a ⚠) and click **Retry** to re-run the pipeline.
 4. If transcription keeps failing, check that `[whisper] binary` and `[whisper] model` paths in your config both exist.
+
+---
+
+## Hosted summarizer: no API key
+
+**Symptom:** The Summarizer submenu shows 🔴 and a label like `LLM: no API key (gpt-4o)`. Summaries fail or fall back to Ollama.
+
+**Cause:** No key was found in the macOS Keychain under service `MeetingRecorder`, account `llm-api-key`, and the `MEETING_RECORDER_LLM_KEY` environment variable is also unset. A menu-bar app launched from Finder does not inherit shell environment variables, so the Keychain is the correct path for the app itself.
+
+**Fix:**
+
+```bash
+security add-generic-password -s MeetingRecorder -a llm-api-key -w
+# (prompts for the key interactively)
+```
+
+Run this once. The app reads the Keychain on every summary request, so you do not need to relaunch. For scripts and tests you can also set `MEETING_RECORDER_LLM_KEY` in your shell.
+
+To verify the key was stored: `security find-generic-password -s MeetingRecorder -a llm-api-key -w`
+
+---
+
+## Hosted summarizer: model not offered
+
+**Symptom:** The Summarizer submenu shows 🔴 and a label like `LLM: gpt-5-turbo not offered`. The endpoint is reachable but summaries fail.
+
+**Cause:** The `[llm] model` in your config is not in the list returned by the endpoint's `/models` API. Either the model name is misspelled, the model has been renamed or retired, or it is not available on your plan/tier.
+
+**Fix:**
+1. Open **Settings… → Summarizer**. If a base URL and API key are present, the model dropdown is populated live from the endpoint. Choose a model from that list.
+2. Alternatively, edit `~/Library/Application Support/MeetingRecorder/config.toml` and correct `[llm] model` to a name the endpoint actually serves.
+
+---
+
+## Hosted summarizer: endpoint unreachable — fell back to Ollama
+
+**Symptom:** The Summarizer submenu shows 🔴 with a label like `LLM: http://localhost:6655/openai/v1 unreachable — Ollama fallback on`. Summaries succeed but use Ollama rather than the configured hosted model.
+
+**Cause:** The configured `base_url` did not respond (connection refused, timeout, or network error). Common causes: you are off VPN, a local gateway proxy is not running, or the URL is wrong.
+
+**Behaviour:** When `fallback_to_ollama = true` (the default), the summary is retried against your local Ollama server rather than being lost. The note is written normally; you can tell it used the fallback from the Summarizer status in the menu.
+
+**Fix:**
+- To restore the hosted model: bring the endpoint back up or reconnect to the network.
+- To disable the fallback (fail loudly instead of silently downgrading): set `fallback_to_ollama = false` in `[llm]`.
+- To always use Ollama: set `[llm] provider = "ollama"` and leave `base_url` and `model` empty.
+
+---
+
+## Stream transcript import fails
+
+**Symptom:** **Import Transcript from Stream… ↗** opens Terminal, which reports an error instead of writing a note.
+
+**Cause and fix depend on the message.** The scraper names every failure deliberately, because the two easy confusions — a policy block versus a slow sign-in, a closed panel versus changed markup — send you looking in completely different places.
+
+| Message | Fix |
+|---|---|
+| `playwright is not installed` | `.venv/bin/pip install playwright` |
+| `Could not launch Google Chrome` | Install Chrome, or check it is at `/Applications/Google Chrome.app` |
+| `No transcript markup found` | The transcript panel was not open. Open it in the Chrome window and re-run |
+| `Transcript-like markup is present but no rows matched` | Microsoft changed the markup. The message lists what it did find; the selector needs re-deriving in DevTools |
+| `Incomplete: N/M rows` | Retry with `--steps` doubled from the command line |
+| `N row(s) were collected but produced no transcript line` | The speaker-label format changed. The message shows the offending rows |
+| `AADSTS…` codes during sign-in | Conditional Access is refusing the automated browser. No code change fixes this; the code is quotable to IT |
+
+**Nothing happens when you click the menu item:** the scraper lives in `scripts/` and is not part of the `.app` bundle, so it needs a source checkout. The item reports a missing script rather than failing silently — check the notification.
+
+**Sign-in is asked for every time:** the session profile at `~/.cache/meeting-recorder-spike/chrome-profile` is being cleared, or was deleted. It normally persists between runs.
+
+See [Importing Stream transcripts](stream-transcripts.md) for the full guide.

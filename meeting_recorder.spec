@@ -6,6 +6,13 @@ from pathlib import Path
 
 block_cipher = None
 
+# scripts/ and .venv/ are deliberately not bundled, but menu items that shell
+# out need to find them. A frozen app cannot derive the checkout from
+# __file__, so record where this build came from.
+_repo_root = Path(SPECPATH).resolve()
+_build_info = _repo_root / '_build_info.py'
+_build_info.write_text(f'REPO_ROOT = {str(_repo_root)!r}\n')
+
 a = Analysis(
     ['app.py'],
     pathex=[],
@@ -35,13 +42,24 @@ a = Analysis(
         'summarizer.ollama',
         'notes',
         'notes.writer',
+        'notes.frames',
+        'notes.vault',
         'pipeline',
         'pipeline.processor',
         'ui',
         'ui.menu',
         'ui.settings_window',
         'ui.stop_dialog',
+        # Imported lazily inside menu handlers, so PyInstaller cannot see these
+        # statically. Omitting one fails only when the menu item is clicked.
+        'ui.transcript_url_dialog',
+        'ui.import_recording_dialog',
+        'ui.edit_menu',
+        'pipeline.importer',
+        'pipeline.frames',
+        'PIL',
         'config',
+        '_build_info',
     ],
     hookspath=[],
     hooksconfig={},

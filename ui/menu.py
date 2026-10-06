@@ -1,6 +1,8 @@
 # ui/menu.py
 import logging
+import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -24,6 +26,8 @@ except ImportError:  # non-macOS or stripped test environment
 from config import Config
 from pipeline.processor import run_pipeline
 from recorder.audio import AudioRecorder
+from summarizer.llm import LLMSettings, LLMStatus
+from summarizer.llm import check_status as llm_check_status
 from summarizer.ollama import OllamaStatus, check_status
 from notes.writer import list_notes
 
@@ -32,12 +36,53 @@ log = logging.getLogger(__name__)
 # Validated characters for an Ollama model name — safe to embed in AppleScript.
 _SAFE_MODEL_RE = re.compile(r'^[A-Za-z0-9._:/@-]+$')
 
+# Written by the spec at build time so a frozen app can find the checkout
+# that produced it — scripts/ and .venv/ are never bundled.
+try:
+    from _build_info import REPO_ROOT as _BUILT_FROM_REPO  # noqa: PLC0415
+except ImportError:
+    _BUILT_FROM_REPO = None
+
 
 def _bundle_resource(rel_path: str) -> str:
     """Resolve a resource path that works in dev mode and inside the .app bundle."""
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         return str(Path(sys._MEIPASS) / rel_path)
     return str(Path(__file__).parent.parent / rel_path)
+
+
+def _repo_path(rel_path: str) -> str:
+    """Resolve a path in the source checkout, never inside the .app bundle.
+
+    For things deliberately not bundled — scripts/ and .venv/. Running from
+    source, __file__ is already in the checkout. Frozen, it is under _MEIPASS,
+    where scripts/ does not exist and never will, so the checkout has to be
+    found another way: an explicit override, then the usual locations.
+
+    Returns the first candidate that exists, else the source-relative path so
+    the caller reports a sensible missing-file error.
+    """
+    candidates: list[Path] = []
+
+    override = os.environ.get("MEETING_RECORDER_REPO")
+    if override:
+        candidates.append(Path(override).expanduser())
+
+    if getattr(sys, "frozen", False):
+        # A frozen app cannot see the checkout from __file__, so try the
+        # recorded build location and the conventional spot.
+        candidates.extend([
+            Path(_BUILT_FROM_REPO) if _BUILT_FROM_REPO else None,
+            Path.home() / "Documents" / "Personal" / "meeting-recorder",
+        ])
+    else:
+        candidates.append(Path(__file__).resolve().parent.parent)
+
+    for base in candidates:
+        if base and (base / rel_path).exists():
+            return str(base / rel_path)
+
+    return str(Path(__file__).resolve().parent.parent / rel_path)
 
 
 ICON_IDLE = _bundle_resource("assets/icon.png")
@@ -192,8 +237,9 @@ class MeetingRecorderApp(rumps.App):
         self._session_dt: datetime | None = None
         self._pending_stop: tuple | None = None
 
-        # Cached Ollama status — probed on a background thread, never on draw
-        self._ollama_status: OllamaStatus | None = None
+        # Cached summarizer status — probed on a background thread, never on draw.
+        # Typed as OllamaStatus | LLMStatus | None to cover both probe paths.
+        self._ollama_status: OllamaStatus | LLMStatus | None = None
         self._ollama_status_lock = threading.Lock()
 
         # Hero action item
@@ -211,6 +257,16 @@ class MeetingRecorderApp(rumps.App):
         self._ollama_menu = rumps.MenuItem("⚪ Ollama")
         self._ollama_root_item = self._ollama_menu  # alias for clarity in _update_ollama_ui
 
+        # ---- Import a local audio/video file (in-process) ----
+        self._import_recording_item = rumps.MenuItem(
+            "Import Recording…", callback=self.import_recording
+        )
+
+        # ---- Import from Stream (shells out — see import_stream_transcript) ----
+        self._import_transcript_item = rumps.MenuItem(
+            "Import Transcript from Stream… ↗", callback=self.import_stream_transcript
+        )
+
         # ---- Location items (shown at bottom of Meetings submenu) ----
         self._location_caption = rumps.MenuItem("", callback=None)
 
@@ -221,6 +277,14 @@ class MeetingRecorderApp(rumps.App):
         self._build_static_submenus()
         self._build_top_menu()
         self._set_idle()
+
+        # An accessory app has no menu bar, so ⌘X/⌘C/⌘V would reach nothing and
+        # no text field in this app could paste. Give them somewhere to dispatch.
+        try:
+            from ui.edit_menu import install_edit_menu  # noqa: PLC0415
+            install_edit_menu()
+        except Exception:
+            log.warning("Edit menu unavailable; clipboard shortcuts will not work")
 
         # Initial Meetings submenu population (sync — output_dir may not exist yet, that's fine)
         self._rebuild_meetings_menu()
@@ -250,6 +314,8 @@ class MeetingRecorderApp(rumps.App):
             self._record_item,
             None,
             self._meetings_menu,
+            self._import_recording_item,
+            self._import_transcript_item,
             self._ollama_menu,
             None,
             self._settings_item,
@@ -449,7 +515,8 @@ class MeetingRecorderApp(rumps.App):
             self._set_processing()
             log.info(
                 "Dispatching pipeline: duration=%ds name=%s context=%s",
-                duration, meeting_name, llm_context,
+                duration, meeting_name,
+                f"{len(llm_context)} chars" if llm_context else "none",
             )
             threading.Thread(
                 target=self._run_pipeline,
@@ -495,6 +562,8 @@ class MeetingRecorderApp(rumps.App):
                 ollama_host=self.config.ollama_host,
                 keep_audio=self.config.keep_audio,
                 ollama_prompt=self.config.ollama_prompt,
+                llm=LLMSettings.from_config(self.config),
+                vault=self.config.vault,
             )
             if result.success:
                 if error_file and result.summary_ok:
@@ -519,7 +588,7 @@ class MeetingRecorderApp(rumps.App):
                     else:
                         self._notify(
                             "Meeting Recorder", "Note saved (summary unavailable)",
-                            result.warning or "Ollama was not reachable. Open Meetings menu to retry.",
+                            result.warning or "No LLM was reachable. Open Meetings menu to retry.",
                         )
                 self._call_on_main(_ui_success)
                 log.info("Pipeline complete: %s", result.note_path)
@@ -575,8 +644,17 @@ class MeetingRecorderApp(rumps.App):
     # ---------------------------------------------------------------- Ollama status
 
     def _probe_ollama_and_refresh_ui(self):
-        """Run a blocking Ollama probe on a background thread, then marshal UI update to main."""
-        status = check_status(self.config.ollama_model, self.config.ollama_host)
+        """Run a blocking summarizer probe on a background thread, then marshal UI update to main.
+
+        When the configured provider is ollama (the default) the existing
+        OllamaStatus path is used so Ollama-specific detail (host, model) is
+        preserved in the submenu.  For hosted providers (openai / anthropic) we
+        use the provider-neutral llm_check_status which returns LLMStatus.
+        """
+        if self.config.llm_provider == "ollama":
+            status = check_status(self.config.ollama_model, self.config.ollama_host)
+        else:
+            status = llm_check_status(LLMSettings.from_config(self.config))
         with self._ollama_status_lock:
             self._ollama_status = status
         # Marshal UI mutation to main thread (issue #2)
@@ -587,20 +665,36 @@ class MeetingRecorderApp(rumps.App):
         self._rebuild_meetings_menu()
         threading.Thread(target=self._probe_ollama_and_refresh_ui, daemon=True).start()
 
-    def _update_ollama_ui(self, status: OllamaStatus):
-        """Update Ollama submenu and root item title. MUST be called on the main thread."""
-        if status.ready:
-            self._ollama_root_item.title = "🟢 Ollama"
-            self._ollama_status_item.title = "🟢 Running"
-            self._ollama_detail_item.title = f"{status.model} · {status.host}"
-        elif status.reachable:
-            self._ollama_root_item.title = "🟡 Ollama"
-            self._ollama_status_item.title = "🟡 Running — model not pulled"
-            self._ollama_detail_item.title = f"{status.model} not found at {status.host}"
+    def _update_ollama_ui(self, status):
+        """Update summarizer submenu and root item title. MUST be called on the main thread.
+
+        Accepts either OllamaStatus (when provider=ollama) or LLMStatus (hosted
+        providers). The two types share .ready and differ in their detail fields.
+        """
+        if isinstance(status, LLMStatus):
+            # Hosted provider (openai / anthropic)
+            if status.ready:
+                self._ollama_root_item.title = "🟢 Summarizer"
+                self._ollama_status_item.title = "🟢 Ready"
+                self._ollama_detail_item.title = status.detail
+            else:
+                self._ollama_root_item.title = "🔴 Summarizer"
+                self._ollama_status_item.title = f"🔴 {status.label}"
+                self._ollama_detail_item.title = status.detail
         else:
-            self._ollama_root_item.title = "🔴 Ollama"
-            self._ollama_status_item.title = "🔴 Not running"
-            self._ollama_detail_item.title = f"No server at {status.host}"
+            # OllamaStatus — preserve existing Ollama-specific detail
+            if status.ready:
+                self._ollama_root_item.title = "🟢 Ollama"
+                self._ollama_status_item.title = "🟢 Running"
+                self._ollama_detail_item.title = f"{status.model} · {status.host}"
+            elif status.reachable:
+                self._ollama_root_item.title = "🟡 Ollama"
+                self._ollama_status_item.title = "🟡 Running — model not pulled"
+                self._ollama_detail_item.title = f"{status.model} not found at {status.host}"
+            else:
+                self._ollama_root_item.title = "🔴 Ollama"
+                self._ollama_status_item.title = "🔴 Not running"
+                self._ollama_detail_item.title = f"No server at {status.host}"
 
     # ---------------------------------------------------------------- meetings submenu
 
@@ -775,6 +869,268 @@ class MeetingRecorderApp(rumps.App):
         script = f'tell application "Terminal" to do script "ollama pull {model}"'
         subprocess.Popen(["osascript", "-e", script])
         self._schedule_ollama_probes([5, 15, 30, 60])
+
+    def import_stream_transcript(self, _):
+        """Ask for a recording URL, then run the scraper in Terminal.
+
+        Deliberately shells out rather than scraping in-process: the scrape needs
+        playwright (which the .app bundle does not ship), a visible browser, a
+        manual sign-in and a manually opened transcript panel. Terminal is also
+        where the script's diagnostics are readable when a selector breaks.
+        """
+        from ui.transcript_url_dialog import (  # noqa: PLC0415
+            looks_like_stream_url,
+            open_transcript_url_dialog,
+        )
+
+        def _on_submit(url: str, name: str | None = None,
+                       frames_at: str | None = None, context: str | None = None):
+            if not looks_like_stream_url(url):
+                log.info("URL does not look like a Stream recording; running anyway")
+            self._launch_transcript_scrape(url, name=name, frames_at=frames_at, context=context)
+
+        open_transcript_url_dialog(on_submit=_on_submit)
+
+    def import_recording(self, _):
+        """Import a local audio or video file and produce a summarised note.
+
+        Runs entirely in-process: no browser, no sign-in, no Terminal window.
+        The pipeline runs on a daemon thread so the menu stays responsive during
+        long transcriptions.  Progress is shown via _set_processing() and
+        reported through _notify() on completion.
+        """
+        from ui.settings_window import _pick_file  # noqa: PLC0415
+
+        file_types = [
+            ["Audio files", ["mp3", "m4a", "aac", "ogg", "flac", "wav", "mp4", "mov", "m4v"]],
+        ]
+        chosen = _pick_file("Select a recording to import", file_types)
+        if not chosen:
+            return
+
+        source_path = Path(chosen)
+
+        # Default datetime from the file's mtime
+        try:
+            mtime = source_path.stat().st_mtime
+            default_dt = datetime.fromtimestamp(mtime)
+        except OSError:
+            default_dt = datetime.now()
+
+        from ui.import_recording_dialog import open_import_recording_dialog  # noqa: PLC0415
+
+        def _on_import(confirmed_dt: datetime, meeting_name: str | None,
+                       llm_context: str | None = None,
+                       frames_every: int | None = None):
+            self._set_processing()
+            log.info(
+                "Dispatching import pipeline: file=%s dt=%s name=%s context=%s frames_every=%s",
+                source_path.name, confirmed_dt, meeting_name,
+                f"{len(llm_context)} chars" if llm_context else "none",
+                frames_every,
+            )
+            threading.Thread(
+                target=self._run_import_pipeline,
+                args=(source_path, confirmed_dt, meeting_name, llm_context, frames_every),
+                daemon=True,
+            ).start()
+
+        def _on_cancel():
+            log.info("Import recording cancelled by user")
+
+        open_import_recording_dialog(
+            default_dt=default_dt,
+            filename=source_path.name,
+            on_import=_on_import,
+            on_cancel=_on_cancel,
+        )
+
+    def _run_import_pipeline(
+        self,
+        source_path: Path,
+        session_dt: datetime,
+        meeting_name: str | None,
+        llm_context: str | None = None,
+        frames_every: int | None = None,
+    ):
+        """Background thread: prepare audio, then call run_pipeline with single_source."""
+        from pipeline.importer import prepare_audio, get_duration_seconds  # noqa: PLC0415
+        from pipeline.importer import AudioImportError  # noqa: PLC0415
+
+        try:
+            # Step 1: get duration
+            try:
+                duration_seconds = get_duration_seconds(source_path)
+                log.info("Import duration: %ds", duration_seconds)
+            except AudioImportError as e:
+                log.error("Could not read duration: %s", e)
+                duration_seconds = 0  # non-fatal; note will show 0m
+
+            # Step 2: convert to 16 kHz mono WAV if needed
+            # Use a temp subdir of the output dir so the converted file is
+            # close to the session folder (same volume) for cheap rename later.
+            import tempfile
+            with tempfile.TemporaryDirectory(
+                prefix="mr-import-", dir=self.config.output_dir.parent
+            ) as tmp_str:
+                tmp_dir = Path(tmp_str)
+                try:
+                    audio_for_pipeline = prepare_audio(source_path, tmp_dir)
+                    log.info("Audio ready for pipeline: %s", audio_for_pipeline)
+                except AudioImportError as e:
+                    log.error("Audio preparation failed: %s", e)
+                    def _ui_prep_fail(msg=str(e)):
+                        self._set_idle()
+                        self._notify("Meeting Recorder", "Import failed", msg)
+                    self._call_on_main(_ui_prep_fail)
+                    return
+
+                # Optional: capture frames from the ORIGINAL file (not the converted
+                # wav). Non-fatal — a failure leaves a note without frames.
+                frames: list[tuple[int, str]] = []
+                frames_dir = tmp_dir / "frames"
+                if frames_every:
+                    try:
+                        from pipeline.frames import extract_frames  # noqa: PLC0415
+
+                        frames = extract_frames(
+                            source_path, frames_dir, frames_every, duration_seconds
+                        )
+                    except Exception as e:
+                        log.warning("Frame capture failed: %s", e)
+
+                # Step 3: run the pipeline with single_source
+                result = run_pipeline(
+                    mic_path=audio_for_pipeline,   # unused when single_source is set
+                    system_path=audio_for_pipeline, # unused when single_source is set
+                    session_dt=session_dt,
+                    duration_seconds=duration_seconds,
+                    meeting_name=meeting_name,
+                    llm_context=llm_context,
+                    output_dir=self.config.output_dir,
+                    whisper_binary=self.config.whisper_binary,
+                    whisper_model=self.config.whisper_model,
+                    ollama_model=self.config.ollama_model,
+                    ollama_host=self.config.ollama_host,
+                    keep_audio=self.config.keep_audio,
+                    ollama_prompt=self.config.ollama_prompt,
+                    single_source=audio_for_pipeline,
+                    llm=LLMSettings.from_config(self.config),
+                    vault=self.config.vault,
+                    frames=frames or None,
+                    frames_dir=frames_dir if frames else None,
+                )
+
+            # tmp_dir is cleaned up by TemporaryDirectory context manager at this point
+
+            if result.success:
+                display_name = (
+                    result.meeting_name
+                    or (result.session_dir.name if result.session_dir else source_path.stem)
+                )
+                note_path_str = str(result.note_path) if result.note_path else None
+
+                def _ui_success():
+                    self._set_idle()
+                    if not result.summary_ok:
+                        self.title = "⚠"
+                    self._rebuild_meetings_menu()
+                    if result.summary_ok:
+                        self._notify(
+                            "Meeting Recorder", "Import complete", display_name,
+                            data={"note_path": note_path_str} if note_path_str else None,
+                            action_button="Open",
+                        )
+                    else:
+                        self._notify(
+                            "Meeting Recorder", "Import complete (summary unavailable)",
+                            result.warning or "No LLM was reachable. Open Meetings menu to retry.",
+                        )
+                self._call_on_main(_ui_success)
+                log.info("Import pipeline complete: %s", result.note_path)
+            else:
+                def _ui_failure():
+                    self._set_idle()
+                    self.title = "⚠ Error"
+                    self._rebuild_meetings_menu()
+                    self._notify(
+                        "Meeting Recorder", "Import failed",
+                        f"Stage: {result.error_stage}. Open Meetings menu to retry.",
+                    )
+                self._call_on_main(_ui_failure)
+
+        except Exception as e:
+            log.exception("Unexpected import error")
+            def _ui_error():
+                self._set_idle()
+                self.title = "⚠ Error"
+                self._notify("Meeting Recorder", "Unexpected import error", str(e))
+                self._rebuild_meetings_menu()
+            self._call_on_main(_ui_error)
+
+    def _launch_transcript_scrape(
+        self,
+        url: str,
+        name: str | None = None,
+        frames_at: str | None = None,
+        context: str | None = None,
+    ):
+        """Open Terminal running the scraper against *url*.
+
+        The URL and optional arguments are written into a temporary shell script
+        rather than interpolated into the AppleScript `do script` string: they
+        are arbitrary user input, and `do script` would otherwise hand them to
+        the shell as code.  Each argument is passed through shlex.quote before
+        being embedded in the script body.
+
+        Optional kwargs map to the CLI flags:
+            name      → --name
+            frames_at → --frames-at
+            context   → --context
+        """
+        script_path = _repo_path("scripts/stream_transcript.py")
+        if not Path(script_path).exists():
+            self._notify(
+                "Meeting Recorder",
+                "Scraper not found",
+                "scripts/stream_transcript.py is missing from this install.",
+            )
+            return
+
+        python = _repo_path(".venv/bin/python")
+        if not Path(python).exists():
+            python = sys.executable
+
+        # Build the optional flag fragments; each value is independently quoted.
+        extra_flags = ""
+        if name:
+            extra_flags += f" --name {shlex.quote(name)}"
+        from ui.transcript_url_dialog import frames_cli_flag  # noqa: PLC0415
+
+        for part in frames_cli_flag(frames_at):
+            extra_flags += f" {shlex.quote(part)}"
+        if context:
+            extra_flags += f" --context {shlex.quote(context)}"
+
+        runner = Path(tempfile.mkdtemp(prefix="mr-scrape-")) / "run.sh"
+        runner.write_text(
+            "#!/bin/sh\n"
+            f"cd {shlex.quote(str(Path(script_path).parent.parent))}\n"
+            f"{shlex.quote(python)} {shlex.quote(script_path)} {shlex.quote(url)} --note{extra_flags}\n"
+            'status=$?\n'
+            'echo\n'
+            'if [ $status -ne 0 ]; then echo "Scrape failed — see the error above."; fi\n'
+            'echo "Press Return to close."; read _\n'
+        )
+        runner.chmod(0o700)
+
+        script = f'tell application "Terminal" to do script "{runner}"'
+        subprocess.Popen(["osascript", "-e", script])
+        self._notify(
+            "Meeting Recorder",
+            "Scraping transcript",
+            "Sign in and open the transcript panel in the Chrome window.",
+        )
 
     def recheck_ollama(self, _):
         """Re-probe Ollama immediately (async)."""

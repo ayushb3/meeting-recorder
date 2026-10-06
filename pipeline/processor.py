@@ -6,9 +6,21 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from notes.frames import interleave_frames, place_frames
+from notes.vault import (
+    VaultConfig,
+    log_to_daily_note,
+    prepare_context,
+    strip_unknown_links,
+)
 from notes.writer import week_folder, write_note
-from summarizer.ollama import OllamaUnavailableError, suggest_title, summarize
-from transcriber.whisper import TranscriptionError, merge_transcripts, transcribe_raw
+from summarizer.llm import LLMSettings, SummaryUnavailableError, suggest_title, summarize
+from transcriber.whisper import (
+    TranscriptionError,
+    _segments_to_lines,
+    merge_transcripts,
+    transcribe_raw,
+)
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +57,15 @@ def run_pipeline(
     meeting_name: str | None = None,
     llm_context: str | None = None,
     ollama_prompt: str | None = None,
+    single_source: Path | None = None,
+    llm: LLMSettings | None = None,
+    frames: list[tuple[int, str]] | None = None,
+    frames_dir: Path | None = None,
+    vault: VaultConfig | None = None,
 ) -> PipelineResult:
+    if llm is None:
+        llm = LLMSettings(ollama_model=ollama_model, ollama_host=ollama_host, prompt=ollama_prompt)
+
     week_dir = output_dir / week_folder(session_dt)
     timestamp = session_dt.strftime("%Y-%m-%d-%Hh%M")
     # Use a timestamped placeholder until we know the final name
@@ -57,55 +77,83 @@ def run_pipeline(
         error_path.write_text(f"stage: {stage}\nerror: {message}\n")
         return PipelineResult(success=False, error_stage=stage, error_message=message)
 
-    # Move raw audio into session folder
-    dest_mic = session_dir / "audio-mic.wav"
-    dest_sys = session_dir / "audio-system.wav"
-    if mic_path != dest_mic:
-        if not mic_path.exists():
-            return write_error("setup", f"Mic audio file not found: {mic_path}")
-        shutil.move(mic_path, dest_mic)
-    if system_path != dest_sys:
-        if not system_path.exists():
-            return write_error("setup", f"System audio file not found: {system_path}")
-        shutil.move(system_path, dest_sys)
+    if single_source is not None:
+        # --- Single-source import path ---
+        # Never move the original file; if keep_audio is true, copy it into the
+        # session folder; otherwise transcribe it in place and leave the original
+        # entirely alone.  Either way, shutil.move is never called on the user's file.
+        if not single_source.exists():
+            return write_error("setup", f"Source file not found: {single_source}")
 
-    # Transcribe both sources and merge
-    try:
-        log.info("Transcribing system audio: %s", dest_sys.name)
-        sys_segments = transcribe_raw(dest_sys, whisper_binary, str(whisper_model), source="system")
-        log.info("System transcription: %d segments", len(sys_segments))
+        if keep_audio:
+            dest_audio = session_dir / ("audio-import" + single_source.suffix)
+            shutil.copy2(single_source, dest_audio)
+            audio_for_note: list[Path] = [dest_audio]
+        else:
+            dest_audio = single_source
+            audio_for_note = []  # original lives outside session dir — don't embed
 
-        log.info("Transcribing mic audio: %s", dest_mic.name)
-        mic_segments = transcribe_raw(dest_mic, whisper_binary, str(whisper_model), source="mic")
-        log.info("Mic transcription: %d segments", len(mic_segments))
+        try:
+            log.info("Transcribing imported audio: %s", single_source.name)
+            segments = transcribe_raw(dest_audio, whisper_binary, str(whisper_model), source="system")
+            log.info("Import transcription: %d segments", len(segments))
+            transcript_lines = _segments_to_lines(segments)
+            log.info("Transcript lines: %d", len(transcript_lines))
+        except TranscriptionError as e:
+            log.error("Transcription failed: %s", e)
+            return write_error("transcribe", str(e))
 
-        transcript_lines = merge_transcripts(sys_segments, mic_segments)
-        log.info("Merged transcript: %d lines", len(transcript_lines))
-    except TranscriptionError as e:
-        log.error("Transcription failed: %s", e)
-        return write_error("transcribe", str(e))
+    else:
+        # --- Normal two-track recorded path ---
+        # Move raw audio into session folder
+        dest_mic = session_dir / "audio-mic.wav"
+        dest_sys = session_dir / "audio-system.wav"
+        if mic_path != dest_mic:
+            if not mic_path.exists():
+                return write_error("setup", f"Mic audio file not found: {mic_path}")
+            shutil.move(mic_path, dest_mic)
+        if system_path != dest_sys:
+            if not system_path.exists():
+                return write_error("setup", f"System audio file not found: {system_path}")
+            shutil.move(system_path, dest_sys)
 
-    # Summarize (non-fatal if Ollama down)
+        # Transcribe both sources and merge
+        try:
+            log.info("Transcribing system audio: %s", dest_sys.name)
+            sys_segments = transcribe_raw(dest_sys, whisper_binary, str(whisper_model), source="system")
+            log.info("System transcription: %d segments", len(sys_segments))
+
+            log.info("Transcribing mic audio: %s", dest_mic.name)
+            mic_segments = transcribe_raw(dest_mic, whisper_binary, str(whisper_model), source="mic")
+            log.info("Mic transcription: %d segments", len(mic_segments))
+
+            transcript_lines = merge_transcripts(sys_segments, mic_segments)
+            log.info("Merged transcript: %d lines", len(transcript_lines))
+        except TranscriptionError as e:
+            log.error("Transcription failed: %s", e)
+            return write_error("transcribe", str(e))
+
+    # Summarize (non-fatal if no LLM is reachable)
     _ollama_unavailable = False
     _ollama_warning: str | None = None
     try:
-        log.info("Summarizing with Ollama: model=%s", ollama_model)
-        summary = summarize(
-            transcript_lines, ollama_model, ollama_host,
-            context=llm_context, custom_template=ollama_prompt,
-        )
+        log.info("Summarizing with %s", llm.label)
+        summary_context, vault_ctx = prepare_context(vault, llm_context, session_dt.date())
+        summary = summarize(transcript_lines, llm, context=summary_context)
+        if vault_ctx is not None:
+            summary = strip_unknown_links(summary, vault_ctx.allowed_links)
         log.info("Summary done (%d chars)", len(summary))
 
         # If no user-supplied name, ask the LLM to suggest one from the summary
         if not meeting_name:
-            meeting_name = suggest_title(summary, ollama_model, ollama_host)
+            meeting_name = suggest_title(summary, llm)
             if meeting_name:
                 log.info("LLM suggested title: %r", meeting_name)
-    except OllamaUnavailableError as e:
-        log.warning("Ollama unavailable: %s — saving note without summary", e)
-        summary = "⚠ Summary unavailable — Ollama was not reachable during processing."
+    except SummaryUnavailableError as e:
+        log.warning("Summarizer unavailable: %s — saving note without summary", e)
+        summary = "⚠ Summary unavailable — no LLM was reachable during processing."
         _ollama_unavailable = True
-        _ollama_warning = f"Ollama unavailable: {e}. Summary was not generated."
+        _ollama_warning = f"Summarizer unavailable: {e}. Summary was not generated."
 
     # Rename session dir now that we have a final name (B6: atomic slug reservation).
     # We must never overwrite an existing dir, including empty ones — POSIX rename(2)
@@ -145,7 +193,7 @@ def run_pipeline(
                 except Exception:
                     pass
 
-    # Write a summarize.error marker when Ollama was unavailable (B2).
+    # Write a summarize.error marker when no LLM was reachable (B2).
     # Must happen AFTER the rename so the marker lands in the final dir.
     # Wrapped so a filesystem error (ENOSPC, read-only) never kills the note write.
     if _ollama_unavailable:
@@ -155,16 +203,38 @@ def run_pipeline(
             log.info("Degraded marker written: %s", marker)
         except Exception as e:
             log.warning("Could not write degraded marker %s: %s", marker, e)
-    dest_mic = session_dir / "audio-mic.wav"
-    dest_sys = session_dir / "audio-system.wav"
+    if single_source is not None:
+        # audio_for_note was set in the single-source branch above.
+        # Update dest reference in case session_dir was renamed.
+        if keep_audio and audio_for_note:
+            audio_for_note = [session_dir / audio_for_note[0].name]
+        note_audio_files = audio_for_note
+    else:
+        dest_mic = session_dir / "audio-mic.wav"
+        dest_sys = session_dir / "audio-system.wav"
+        note_audio_files = [dest_mic, dest_sys]
+
+    # Copy frames into the final session dir (after the rename sweep, so the path
+    # is settled) and interleave them into the transcript. Frames are an
+    # enhancement: any failure here leaves the plain transcript.
+    note_lines = transcript_lines
+    if frames and frames_dir is not None:
+        try:
+            landed = place_frames(frames, frames_dir, session_dir)
+            if landed:
+                note_lines = interleave_frames(transcript_lines, landed)
+                log.info("Placed %d frame(s) in %s", len(landed), session_dir.name)
+        except Exception as e:
+            log.warning("Could not place frames: %s", e)
+
     try:
         log.info("Writing note to %s", session_dir)
         note_path = write_note(
             dt=session_dt,
             duration_seconds=duration_seconds,
             summary=summary,
-            transcript_lines=transcript_lines,
-            audio_files=[dest_mic, dest_sys],
+            transcript_lines=note_lines,
+            audio_files=note_audio_files,
             output_dir=session_dir,
             overwrite=True,
             meeting_name=meeting_name,
@@ -174,10 +244,21 @@ def run_pipeline(
         log.error("Write note failed: %s", e)
         return write_error("write_note", str(e))
 
+    if vault is not None:
+        try:
+            if log_to_daily_note(vault, note_path, meeting_name or session_dir.name, session_dt):
+                log.info("Logged note in the daily note")
+        except Exception as e:  # never let write-back fail an otherwise good note
+            log.warning("Could not log note to the daily note: %s", e)
+
     # Clean up audio if keep_audio is False
     if not keep_audio:
-        dest_mic.unlink(missing_ok=True)
-        dest_sys.unlink(missing_ok=True)
+        if single_source is None:
+            dest_mic = session_dir / "audio-mic.wav"
+            dest_sys = session_dir / "audio-system.wav"
+            dest_mic.unlink(missing_ok=True)
+            dest_sys.unlink(missing_ok=True)
+        # For single_source: the original file is never touched
 
     return PipelineResult(
         success=True,

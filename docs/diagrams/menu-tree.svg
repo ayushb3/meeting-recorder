@@ -57,37 +57,41 @@
 <text x="198.0" y="550" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Settings</text>
 <path d="M44,562 L44,578" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M44,578 L54,578" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="58" y="582" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">🟢/🟡/🔴 Ollama ▸</text>
-<text x="157.0" y="582" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← colour shows server state</text>
-<path d="M72,594 L72,610" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<path d="M72,610 L82,610" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="614" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="start">🟢 Running  /  🟡 Running — model not pulled  /  🔴 Not running</text>
+<text x="58" y="582" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Import Transcript from Stream… ↗</text>
+<text x="274.0" y="582" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← URL prompt, then scrapes in Terminal</text>
+<path d="M44,594 L44,610" stroke="#3a5068" stroke-width="1.5" fill="none"/>
+<path d="M44,610 L54,610" stroke="#3a5068" stroke-width="1.5" fill="none"/>
+<text x="58" y="614" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">🟢/🟡/🔴 Ollama ▸</text>
+<text x="157.0" y="614" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← colour shows server state</text>
 <path d="M72,626 L72,642" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,642 L82,642" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="646" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">model · host</text>
-<text x="172.0" y="646" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← detail line</text>
+<text x="86" y="646" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#8ab8d8" text-anchor="start">🟢 Running  /  🟡 Running — model not pulled  /  🔴 Not running</text>
 <path d="M72,658 L72,674" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,674 L82,674" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="678" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">— separator —</text>
+<text x="86" y="678" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">model · host</text>
+<text x="172.0" y="678" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← detail line</text>
 <path d="M72,690 L72,706" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,706 L82,706" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Start Ollama in Terminal ↗</text>
-<text x="263.0" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama serve</text>
+<text x="86" y="710" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">— separator —</text>
 <path d="M72,722 L72,738" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,738 L82,738" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Pull Model… ↗</text>
-<text x="178.5" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama pull</text>
+<text x="86" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Start Ollama in Terminal ↗</text>
+<text x="263.0" y="742" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama serve</text>
 <path d="M72,754 L72,770" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M72,770 L82,770" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="86" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Refresh Ollama Status</text>
-<text x="230.5" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← async re-probe</text>
-<path d="M44,786 L44,802" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<path d="M44,802 L54,802" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="58" y="806" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">— separator —</text>
+<text x="86" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Pull Model… ↗</text>
+<text x="178.5" y="774" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← opens Terminal with ollama pull</text>
+<path d="M72,786 L72,802" stroke="#3a5068" stroke-width="1.5" fill="none"/>
+<path d="M72,802 L82,802" stroke="#3a5068" stroke-width="1.5" fill="none"/>
+<text x="86" y="806" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Refresh Ollama Status</text>
+<text x="230.5" y="806" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← async re-probe</text>
 <path d="M44,818 L44,834" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M44,834 L54,834" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="58" y="838" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Settings…</text>
-<text x="124.5" y="838" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← folder + device pickers</text>
+<text x="58" y="838" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#546880" text-anchor="start">— separator —</text>
 <path d="M44,850 L44,866" stroke="#3a5068" stroke-width="1.5" fill="none"/>
 <path d="M44,866 L54,866" stroke="#3a5068" stroke-width="1.5" fill="none"/>
-<text x="58" y="870" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Quit</text></svg>
+<text x="58" y="870" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Settings…</text>
+<text x="124.5" y="870" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="normal" fill="#546880" text-anchor="start">  ← folder + device pickers</text>
+<path d="M44,882 L44,898" stroke="#3a5068" stroke-width="1.5" fill="none"/>
+<path d="M44,898 L54,898" stroke="#3a5068" stroke-width="1.5" fill="none"/>
+<text x="58" y="902" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="normal" fill="#e8f0fa" text-anchor="start">Quit</text></svg>

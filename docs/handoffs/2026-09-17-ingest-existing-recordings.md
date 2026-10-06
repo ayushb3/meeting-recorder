@@ -1,5 +1,18 @@
 # Handoff — ingesting recordings the app did not make
 
+> **⚠ Superseded — historical record only. Do not build from this document.**
+>
+> - **Feature B (Stream transcripts) shipped** in `c602a87` and `b6f386b`. See
+>   `scripts/stream_transcript.py` and `docs/stream-transcripts.md`.
+> - **Feature A (import a local file) is still open** and has its own current handoff:
+>   [`2026-09-17-import-local-recording.md`](2026-09-17-import-local-recording.md). Use that one.
+>
+> Section 3's mechanics below turned out to be **wrong in every particular** — scrolling the
+> container does nothing, there is no bounce-back, and `aria-setsize` sits on the rows rather
+> than the container. The panel scrolls itself to follow the video's playhead, and the shipped
+> scraper drives it by seeking the video instead. Kept for the reasoning and the dead ends,
+> not the selectors.
+
 **Written:** 2026-09-17 · **For:** a fresh local session on macOS
 **Repo state:** `61df05f`, 153 tests passing, working tree clean
 

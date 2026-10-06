@@ -1,10 +1,22 @@
 # Meeting Recorder
 
-A macOS menu bar app that records meetings (mic + system audio), transcribes with whisper.cpp, summarizes with a local LLM (Ollama), and writes structured notes into your Obsidian vault. Everything runs on-device — no cloud, no subscriptions.
-
-System audio is captured with a **Core Audio process tap**, so there is no audio driver to install and nothing to configure. It works whatever you are listening on, Bluetooth earbuds included.
+A macOS menu bar app that records meetings, transcribes locally with whisper.cpp, summarises with an LLM, and writes structured notes into your Obsidian vault.
 
 ![Root menu in idle state, showing Start Recording, Meetings submenu, Ollama status, Settings, and Quit](docs/screenshots/menu-idle.png)
+
+## What it can do
+
+| | |
+|---|---|
+| **Record a live meeting** | Captures mic + system audio simultaneously. macOS 14.2+ uses a Core Audio process tap — no driver to install, works on Bluetooth headphones. Older versions fall back to BlackHole. After stopping, a dialog takes an optional meeting name and context for the AI. |
+| **Import a local audio/video file** | **Import Recording…** in the menu accepts any file your system can decode (mp3, m4a, mp4, mov, …). The original is never moved. The same dialog lets you confirm the recording date/time, set an optional title, and add context (attendees, project names, terms). |
+| **Scrape a Stream/Teams recording** | **Import Transcript from Stream… ↗** opens a dialog asking for the recording URL. Fields: optional **Title**, optional **Frames at** (timestamps for screenshare screenshots embedded in the note), optional **Context**. The scrape runs in Terminal with a real Chrome window — sign-in and opening the transcript panel are manual steps. |
+| **Summarise with any LLM** | Default: local **Ollama** (offline, no key needed). Also supports any **OpenAI-compatible API** and the **Anthropic Messages API** — including local gateways. Configured in Settings → Summarizer or the `[llm]` table in config.toml. API key lives in the macOS Keychain (never in the config file). Model list in Settings is fetched live from the endpoint's `/models`. |
+| **Names & terms** | A persistent list of names and technical terms sent with every summary so the model spells them consistently. Set in Settings → Summarizer → Names & terms. |
+| **Automatic Ollama fallback** | When a hosted API is unreachable (e.g. off VPN), the app falls back to Ollama rather than losing the summary. Turn it off in Settings → Summarizer or with `fallback_to_ollama = false`. |
+| **Retry failed summaries** | If any pipeline stage fails, audio is preserved. A ⚠ entry in Meetings ▸ lets you retry when the problem is resolved. |
+
+System audio is captured with a **Core Audio process tap**, so there is no audio driver to install and nothing to configure. It works whatever you are listening on, Bluetooth earbuds included.
 
 ## How it works
 
@@ -17,7 +29,7 @@ System audio (Core Audio tap) ─────────► Two-pass transcript
                                                   │
                                          Merge + dedup bleed
                                                   │
-                                          Ollama summary + title
+                                    Ollama / OpenAI / Anthropic API
                                                   │
                                         Obsidian note (.md)
 ```
@@ -68,7 +80,7 @@ curl -L -o /opt/homebrew/Cellar/whisper-cpp/1.8.4/share/whisper-cpp/ggml-large-v
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin"
 ```
 
-### 3. Ollama — local LLM summarization
+### 3. Ollama — local LLM summarization (default)
 
 Download from [ollama.com](https://ollama.com), then:
 
@@ -78,6 +90,8 @@ ollama serve              # start before using the app
 ```
 
 > **Resource usage:** `ollama serve` idles at ~50–100 MB RAM with no active requests — it's cheap to leave running all day. The 8B model only loads into GPU/RAM when a request comes in (i.e. after you stop a recording), then unloads after a short timeout. You won't notice it while working normally.
+
+Ollama is the default and works entirely offline. To use a hosted or gateway API instead, see [Summarizer configuration](#summarizer-configuration) below.
 
 ---
 
@@ -146,12 +160,77 @@ host  = "http://localhost:11434"
 # prompt = "..."   # optional: replace the built-in summary prompt.
                    # Must contain {transcript}; may contain {context}.
 
+[llm]
+# Which backend writes the summary. Default: "ollama" (local, offline).
+# "openai"    — any OpenAI-compatible Chat Completions API
+# "anthropic" — the Anthropic Messages API
+# base_url includes the version segment, e.g.:
+#   https://api.openai.com/v1
+#   https://api.anthropic.com/v1
+#   http://localhost:6655/openai/v1  (local gateway)
+provider          = "ollama"
+base_url          = ""
+model             = ""
+terms             = ""     # names/terms sent with every summary; comma-separated or one per line
+fallback_to_ollama = true   # fall back to Ollama when the hosted API is unreachable
+
 [processing]
 keep_audio             = true   # keep .wav files alongside notes
 min_recording_seconds  = 30     # discard accidental short recordings
 low_disk_threshold_mb  = 500    # auto-stop if disk is low
 mic_threshold          = 300    # mic RMS gate (0–32767), suppresses speaker bleed
 ```
+
+### Summarizer configuration
+
+The `[llm]` table controls which model writes summaries. Three providers are supported:
+
+| `provider` | What it connects to |
+|---|---|
+| `ollama` (default) | Local Ollama server at `[ollama] host`. Fully offline. |
+| `openai` | Any OpenAI-compatible Chat Completions endpoint (`/v1/chat/completions`). Set `base_url` to `https://api.openai.com/v1` or a local gateway such as `http://localhost:6655/openai/v1`. |
+| `anthropic` | The Anthropic Messages API. Set `base_url` to `https://api.anthropic.com/v1` or a gateway that speaks the Anthropic protocol. |
+
+**API key — stored in the macOS Keychain, not in config.toml.** Add it once:
+
+```bash
+security add-generic-password -s MeetingRecorder -a llm-api-key -w
+# (prompts for the key)
+```
+
+For scripts and tests, the `MEETING_RECORDER_LLM_KEY` environment variable is also accepted.
+
+**`fallback_to_ollama = true`** means that if the hosted endpoint is unreachable (e.g. off VPN), the summary is retried against Ollama rather than being lost. The note is still written and the summary is added when the retry succeeds.
+
+**`terms`** is a persistent list of names and technical terms (comma-separated or one per line) sent with every summary so the model uses consistent spelling. Edit it in Settings → Summarizer → Names & terms, or directly in config.toml.
+
+The **Settings → Summarizer** section in the app mirrors all of these fields. When a `base_url` and API key are present, the model dropdown is populated live by querying the endpoint's `/models` list.
+
+### Private prompt and vault context
+
+**`[llm] prompt_file`** points at a summary prompt kept outside this repo — a file with
+`{transcript}` and optionally `{context}`. It outranks the inline `[ollama] prompt`. A missing
+or invalid file falls back to the built-in prompt. Tune the prompt for your own meetings there
+and the public default stays generic.
+
+**`[vault]`** is off unless `root` is set. When it is, each summary is given a small, bounded
+block of current work context so it uses real project and people names:
+
+1. `orient_command` (optional) refreshes a status file first. Use absolute paths — a Finder-launched
+   app does not inherit your shell's `PATH`. A failure is ignored.
+2. `status_file` (default `NOW.md`) is read.
+3. The `sections` (default Today, Active Projects, Waiting on / Blocked) of the last
+   `daily_notes_to_read` daily notes, up to the meeting's date, are read.
+
+The whole block is capped at `context_max_chars`. The model may write `[[links]]` only to names
+that appear in it or in the vault's `vault-index.json`; any other link is flattened to plain text
+so a summary never creates dangling notes. With `write_daily_note = true`, the finished note is
+also logged under the meeting date's daily note (`notes_section`, default `Notes Created`) using a
+vault-relative link. A missing daily note is never created. Every failure degrades to no context
+or no link — it cannot stop a note being written.
+
+All of this lives in your own config under `~/Library/Application Support/MeetingRecorder/`;
+nothing about your vault is stored in or sent to this repo.
 
 ### capture_method
 
@@ -165,14 +244,33 @@ mic_threshold          = 300    # mic RMS gate (0–32767), suppresses speaker b
 
 ## Usage
 
-1. Start Ollama: `ollama serve` (or use **Ollama ▸ Start Ollama in Terminal ↗**)
+1. Start Ollama: `ollama serve` (or use **Ollama ▸ Start Ollama in Terminal ↗**). Skip if you are using a hosted API instead.
 2. Launch **Meeting Recorder** — it lives in the menu bar, with no Dock icon
 3. Click **Start Recording** before your meeting starts
 4. Click **Stop Recording** when done
 5. A dialog appears — optionally enter a suggested title and context for the AI summary, then click **Process**
 6. Wait for the notification: "Note saved — *Your Meeting Title*". Click it to open the note
 
-Recording never waits on Ollama. If the summary model is unreachable the transcript is still captured and written; the note is marked and can be reprocessed later.
+Recording never waits on the summarizer. If the model is unreachable the transcript is still captured and written; the note is marked and can be reprocessed later.
+
+### Importing a local audio or video file
+
+**Import Recording…** in the menu opens a file picker. Select any audio or video file (mp3, m4a, wav, mp4, mov, and any format your system can decode). A dialog then lets you:
+
+- Confirm or correct the recording date and time (pre-filled from the file's modification date)
+- Set an optional meeting title
+- Add optional context for the AI (attendees, project names, technical terms)
+- Capture a frame every N seconds from a video, so the note shows what was on screen as well as what was said (near-duplicate frames are dropped)
+
+The original file is never moved or modified.
+
+### Importing a meeting you did not record
+
+For a Teams/Stream recording made by someone else, **Import Transcript from Stream… ↗** takes
+the recording's URL and scrapes the transcript into a note, with real speaker names. The dialog
+accepts an optional title, optional screenshare frame timestamps (**Frames at**), and optional
+context. See [Importing Stream transcripts](docs/stream-transcripts.md) for setup and the
+manual steps it needs.
 
 ### The menu
 
@@ -183,7 +281,7 @@ Recording never waits on Ollama. If the summary model is unreachable the transcr
 ────────
 Meetings ▸        Today — Wed 16 Sep
                   09:00  Standup
-                  11:00  FDE Roadshow
+                  11:00  Platform Roadmap
                   15:00  ⚠ 15:00  Product Review     ← summary failed, retry inside
                   ────────
                   Earlier this week
@@ -192,7 +290,9 @@ Meetings ▸        Today — Wed 16 Sep
                   ~/Documents/Obsidian/Meetings
                   Open Meetings Folder ↗
                   Change Location…
-🟢 Ollama ▸       🟢 Running
+Import Recording…
+Import Transcript from Stream… ↗
+🟢 Ollama ▸       🟢 Running                    (shows 🟢/🔴 Summarizer when a hosted API is configured)
                   llama3.1:8b · localhost:11434
                   ────────
                   Start Ollama in Terminal ↗
@@ -209,8 +309,10 @@ The root menu is a fixed size — meetings live in the submenu, so it does not g
 |---|---|
 | Start / Stop Recording | Shows elapsed time while recording, then *Processing…* until the note is written |
 | Meetings ▸ | Recent notes grouped by day. Click one to open it. A ⚠ entry has a **Retry Summary** child |
-| 🟢 Ollama ▸ | Colour shows server state at a glance: 🟢 ready, 🟡 running but model not pulled, 🔴 unreachable |
-| Settings… | Folder picker, audio device dropdowns, and the rest of the config |
+| Import Recording… | Import a local audio/video file. Dialog: date/time, optional title, optional context |
+| Import Transcript from Stream… ↗ | Scrapes a recording you did not make. Dialog: URL, optional title, optional frame timestamps, optional context. Opens Terminal and a browser — see [the guide](docs/stream-transcripts.md) |
+| 🟢/🔴 Ollama ▸ | When provider is Ollama: 🟢 ready, 🟡 model not pulled, 🔴 unreachable. When a hosted API is configured: shows as **Summarizer** with 🟢/🔴 |
+| Settings… | Folder picker, audio device dropdowns, summarizer config, names & terms, and the rest |
 
 ---
 
@@ -317,6 +419,7 @@ Both capture paths fail by producing silence rather than an error, so the app ch
 |---|---|
 | [Getting Started](docs/getting-started.md) | First-time setup, build or receive the app, configure, and record your first meeting |
 | [Menu Reference](docs/menu-reference.md) | Every menu item, what it does, and when it is enabled |
+| [Importing Stream transcripts](docs/stream-transcripts.md) | Getting a transcript out of a meeting someone else recorded |
 | [Troubleshooting](docs/troubleshooting.md) | Symptom-first guide to common problems |
 | [Diagrams](docs/diagrams/) | Pipeline flow, capture architecture, and menu tree as SVGs |
 | [Screenshots](docs/screenshots/README.md) | Guide to the screenshots that can be captured and where to drop them |
@@ -332,7 +435,7 @@ Both capture paths fail by producing silence rather than an error, so the app ch
 | System audio | Core Audio process tap (PyObjC + ctypes) |
 | Mic capture | `sounddevice` + `soundfile` |
 | Transcription | `whisper.cpp` (subprocess) |
-| Summarization | Ollama local HTTP API |
+| Summarization | Ollama local HTTP API, OpenAI-compatible API, or Anthropic Messages API (`summarizer/llm.py`) |
 | Config | `tomllib` (stdlib) |
 | Bundling | PyInstaller 6.x |
 
