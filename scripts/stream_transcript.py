@@ -230,6 +230,39 @@ def _await_frame_ready(page, timeout_ms: int = 10_000) -> bool:
     return False
 
 
+def interval_timestamps(duration: float, every_s: int) -> list[int]:
+    """Timestamps for --frames-every: 0, N, 2N ... strictly before the end.
+
+    The interval is raised if it would exceed the frame cap, so a long recording
+    with a small N cannot ask for thousands of seeks.
+    """
+    from pipeline.frames import effective_interval  # noqa: PLC0415
+
+    if not duration or duration <= 0:
+        raise ValueError(
+            "Cannot tell how long the recording is, so --frames-every cannot "
+            "pick timestamps. Use --frames-at instead."
+        )
+    step = effective_interval(every_s, int(duration))
+    if step != every_s:
+        print(f"  frame interval raised from {every_s}s to {step}s (frame cap)")
+    return list(range(0, int(duration), step))
+
+
+def dedupe_captured(
+    frames: list[tuple[int, str]], frames_dir: Path
+) -> list[tuple[int, str]]:
+    """Drop near-duplicate captured frames and delete their files."""
+    from pipeline.frames import dedupe_frames  # noqa: PLC0415
+
+    kept = dedupe_frames([(s, frames_dir / n) for s, n in frames])
+    kept_names = {path.name for _, path in kept}
+    for _, name in frames:
+        if name not in kept_names:
+            (frames_dir / name).unlink(missing_ok=True)
+    return [(s, path.name) for s, path in kept]
+
+
 def capture_frames(page, seconds_list: list[int], out_dir: Path, extra_settle_ms: int) -> list[tuple[int, str]]:
     """Seek to each timestamp and screenshot the video element.
 
@@ -329,6 +362,7 @@ def run(
     frames_at: str | None = None,
     frames_dir: Path | None = None,
     capture_settle_ms: int = 400,
+    frames_every: int | None = None,
 ) -> tuple[list[str], datetime | None, list[tuple[int, str]], int]:
     """Drive the browser and return (transcript_lines, recording_date, frames, duration_s)."""
     try:
@@ -428,9 +462,12 @@ def run(
             if not isinstance(duration, (int, float)) or not math.isfinite(duration):
                 duration = 0
             frames: list[tuple[int, str]] = []
-            if frames_at:
+            if frames_at or frames_every:
                 try:
-                    wanted = parse_timestamps(frames_at, duration)
+                    if frames_at:
+                        wanted = parse_timestamps(frames_at, duration)
+                    else:
+                        wanted = interval_timestamps(duration, frames_every)
                 except ValueError as exc:
                     raise ScrapeError(str(exc)) from exc
                 if wanted and frames_dir is not None:
@@ -443,6 +480,10 @@ def run(
                             f"  WARNING: {len(wanted) - len(frames)} frame(s) "
                             "could not be captured"
                         )
+                    if frames_every and frames:
+                        before = len(frames)
+                        frames = dedupe_captured(frames, frames_dir)
+                        print(f"  kept {len(frames)} of {before} after removing near-duplicates")
 
             _seek(page, 0)
             return lines, recorded_at, frames, int(duration)
@@ -570,6 +611,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Capture screenshare frames at these times, e.g. 7:46,19:40,1:02:15",
     )
     parser.add_argument(
+        "--frames-every", type=int, metavar="SECONDS",
+        help="Capture a frame every N seconds, dropping near-duplicates "
+             "(cannot be combined with --frames-at)",
+    )
+    parser.add_argument(
         "--capture-settle-ms", type=int, default=400,
         help="Extra wait after the player reports ready (default: 400)",
     )
@@ -581,15 +627,21 @@ def main(argv: list[str] | None = None) -> int:
             f"Not a URL: {args.url!r}\n"
             '  Paste the recording URL in quotes: "https://..."',
         )
+    if args.frames_at and args.frames_every:
+        return _fail("SETUP", "Use either --frames-at or --frames-every, not both.")
+    if args.frames_every is not None and args.frames_every < 1:
+        return _fail("SETUP", "--frames-every must be at least 1 second.")
     if not args.out and not args.note:
         print("Note: neither --out nor --note given; printing to stdout only.\n")
 
     try:
-        frames_dir = Path(tempfile.mkdtemp(prefix='mr-frames-')) if args.frames_at else None
+        wants_frames = bool(args.frames_at or args.frames_every)
+        frames_dir = Path(tempfile.mkdtemp(prefix='mr-frames-')) if wants_frames else None
         lines, detected_date, frames, duration = run(
             args.url, args.steps, args.settle_ms, args.login_timeout,
             frames_at=args.frames_at, frames_dir=frames_dir,
             capture_settle_ms=args.capture_settle_ms,
+            frames_every=args.frames_every,
         )
     except ScrapeError as exc:
         return _fail("SCRAPE", str(exc))

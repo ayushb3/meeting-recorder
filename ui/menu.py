@@ -1103,8 +1103,10 @@ class MeetingRecorderApp(rumps.App):
         extra_flags = ""
         if name:
             extra_flags += f" --name {shlex.quote(name)}"
-        if frames_at:
-            extra_flags += f" --frames-at {shlex.quote(frames_at)}"
+        from ui.transcript_url_dialog import frames_cli_flag  # noqa: PLC0415
+
+        for part in frames_cli_flag(frames_at):
+            extra_flags += f" {shlex.quote(part)}"
         if context:
             extra_flags += f" --context {shlex.quote(context)}"
 

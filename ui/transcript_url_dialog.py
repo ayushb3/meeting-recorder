@@ -27,6 +27,23 @@ _active_delegate = None
 # Same rule as parse_timestamps in scripts/stream_transcript.py: 1-3 digit groups.
 _TIMESTAMP_RE = re.compile(r'^\d+(?::\d+){0,2}$')
 
+# "every 10" or "every 10s": a frame at that interval instead of explicit times.
+_EVERY_RE = re.compile(r'^every\s+(\d+)\s*s?$', re.IGNORECASE)
+
+
+def frames_cli_flag(spec: str | None) -> list[str]:
+    """CLI arguments for a normalised frames spec: --frames-at or --frames-every.
+
+    Returns [flag, value] or [] when there is nothing to capture. Callers quote
+    each element.
+    """
+    if not spec:
+        return []
+    every = _EVERY_RE.match(spec)
+    if every:
+        return ["--frames-every", every.group(1)]
+    return ["--frames-at", spec]
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers — no AppKit dependency, fully unit-testable
@@ -73,11 +90,17 @@ def normalise_frames_at(raw: str | None) -> str | None:
     """
     if not raw:
         return None
+    every = _EVERY_RE.match(raw.strip())
+    if every:
+        seconds = int(every.group(1))
+        if seconds < 1:
+            raise ValueError("Frame interval must be at least 1 second (e.g. every 10).")
+        return f"every {seconds}"
     pieces = [p.strip() for p in raw.split(",")]
     pieces = [p for p in pieces if p]  # drop empty segments
     if not pieces:
         return None
-    bad = [p for p in pieces if not _TIMESTAMP_RE.match(p)]
+    bad =[p for p in pieces if not _TIMESTAMP_RE.match(p)]
     if bad:
         raise ValueError(
             f"Invalid timestamp(s): {', '.join(bad)!r}. "
@@ -267,7 +290,7 @@ def open_transcript_url_dialog(
 
     y -= GAP + 22
     frames_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 22))
-    frames_field.setPlaceholderString_("7:46, 19:40 — optional")
+    frames_field.setPlaceholderString_("7:46, 19:40  or  every 10 — optional")
     frames_field.setFont_(NSFont.systemFontOfSize_(12))
     content.addSubview_(frames_field)
 

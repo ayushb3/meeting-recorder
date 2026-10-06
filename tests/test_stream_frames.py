@@ -156,3 +156,51 @@ class TestCaptureFrames:
 
         page.locator.return_value.first.screenshot.side_effect = flaky
         assert capture_frames(page, [10, 20], tmp_path, 0) == [(20, "frame-0020.png")]
+
+
+# ---------------------------------------------------------------------------
+# --frames-every
+# ---------------------------------------------------------------------------
+
+from stream_transcript import dedupe_captured, interval_timestamps  # noqa: E402
+
+
+class TestIntervalTimestamps:
+    def test_every_n_stops_before_the_end(self):
+        assert interval_timestamps(95, 30) == [0, 30, 60, 90]
+
+    def test_long_recording_interval_is_raised(self):
+        from pipeline.frames import MAX_FRAMES
+
+        stamps = interval_timestamps(MAX_FRAMES * 20, 1)
+        assert len(stamps) <= MAX_FRAMES
+        assert stamps[1] == 20
+
+    @pytest.mark.parametrize("duration", [0, None])
+    def test_unknown_duration_is_an_error(self, duration):
+        with pytest.raises(ValueError, match="frames-at"):
+            interval_timestamps(duration, 10)
+
+
+def test_dedupe_captured_deletes_dropped_files(tmp_path):
+    from PIL import Image
+
+    names = []
+    for seconds, value in [(0, 20), (10, 20), (20, 220)]:
+        name = f"frame-{seconds // 60:02d}{seconds % 60:02d}.png"
+        Image.new("L", (64, 64), value).save(tmp_path / name)
+        names.append((seconds, name))
+
+    kept = dedupe_captured(names, tmp_path)
+
+    assert kept == [(0, "frame-0000.png"), (20, "frame-0020.png")]
+    assert not (tmp_path / "frame-0010.png").exists()
+
+
+def test_frames_at_and_frames_every_are_mutually_exclusive(capsys):
+    from stream_transcript import main
+
+    code = main(["https://example.invalid/x", "--frames-at", "1:00", "--frames-every", "10"])
+    captured = capsys.readouterr()
+    assert code != 0
+    assert "not both" in captured.err + captured.out

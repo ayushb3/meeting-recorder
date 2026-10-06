@@ -104,3 +104,23 @@ class TestNormaliseFramesAt:
         with pytest.raises(ValueError) as exc_info:
             normalise_frames_at("7:46, badvalue, 19:40")
         assert "badvalue" in str(exc_info.value)
+
+
+class TestFramesEvery:
+    @pytest.mark.parametrize("raw,expected", [
+        ("every 10", "every 10"), ("Every 10s", "every 10"), ("  every   30 ", "every 30"),
+    ])
+    def test_every_is_normalised(self, raw, expected):
+        from ui.transcript_url_dialog import normalise_frames_at
+        assert normalise_frames_at(raw) == expected
+
+    def test_every_zero_is_rejected(self):
+        from ui.transcript_url_dialog import normalise_frames_at
+        with pytest.raises(ValueError):
+            normalise_frames_at("every 0")
+
+    def test_cli_flags(self):
+        from ui.transcript_url_dialog import frames_cli_flag
+        assert frames_cli_flag("every 10") == ["--frames-every", "10"]
+        assert frames_cli_flag("7:46,19:40") == ["--frames-at", "7:46,19:40"]
+        assert frames_cli_flag(None) == []
