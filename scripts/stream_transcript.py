@@ -452,7 +452,7 @@ def run(
             skipped = len(dropped) - len(unexpected)
             print(f"  {len(lines)} lines ({skipped} transcription notice(s) skipped)")
 
-            recorded_at = _recording_date(page)
+            recorded_at = _recording_date(page, url)
 
             duration = page.evaluate(
                 "() => { const v = document.querySelector('video');"
@@ -491,19 +491,80 @@ def run(
             ctx.close()
 
 
-def _recording_date(page) -> datetime | None:
-    """Best-effort recording date from the page, for the note's frontmatter."""
-    try:
-        body = page.inner_text("body")[:3000]
-    except Exception:
+_MONTHS = (
+    "January|February|March|April|May|June|July|August|September|October|"
+    "November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec"
+)
+_DATE_TIME_RE = re.compile(
+    rf"\b({_MONTHS})\.? (\d{{1,2}}), (\d{{4}})"
+    r"(?:,? (?:at )?(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp]\.?[Mm]\.?)?)?"
+)
+_FILENAME_STAMP_RE = re.compile(r"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})")
+
+
+def parse_recording_datetime(text: str) -> datetime | None:
+    """First 'Month D, YYYY' in *text*, with the time that follows it if present.
+
+    Stream shows the recording's own date and time in the viewer's local zone, so
+    this is the actual start time. Without a time the result is midnight.
+    """
+    match = _DATE_TIME_RE.search(text)
+    if not match:
         return None
-    match = re.search(r"([A-Z][a-z]+ \d{1,2}, \d{4})", body)
+    month, day, year, hour, minute, meridiem = match.groups()
+    try:
+        base = datetime.strptime(f"{month[:3]} {day} {year}", "%b %d %Y")
+    except ValueError:
+        return None
+    if hour is None:
+        return base
+    h = int(hour)
+    if meridiem:
+        pm = meridiem.lower().startswith("p")
+        if not 1 <= h <= 12:
+            return base
+        h = h % 12 + (12 if pm else 0)
+    if h > 23 or int(minute) > 59:
+        return base
+    return base.replace(hour=h, minute=int(minute))
+
+
+def filename_datetime(url: str) -> datetime | None:
+    """A YYYYMMDD_HHMMSS stamp in the recording's file name, as a last resort.
+
+    Teams names recordings '...-20261005_090149-Meeting Recording.mp4'. The zone
+    is the recorder's, not necessarily the viewer's, so this only fills in a time
+    the page did not show.
+    """
+    from urllib.parse import unquote  # noqa: PLC0415
+
+    match = _FILENAME_STAMP_RE.search(unquote(url))
     if not match:
         return None
     try:
-        return datetime.strptime(match.group(1), "%B %d, %Y")
+        return datetime(*(int(g) for g in match.groups()))
     except ValueError:
         return None
+
+
+def _recording_date(page, url: str = "") -> datetime | None:
+    """Best-effort recording date and time from the page, for the note."""
+    try:
+        body = page.inner_text("body")[:3000]
+    except Exception:
+        body = ""
+    found = parse_recording_datetime(body)
+    stamped = filename_datetime(url) if url else None
+    if found is not None and (found.hour or found.minute):
+        print(f"  recording time from the page: {found:%Y-%m-%d %H:%M}")
+        return found
+    if stamped is not None and (found is None or found.date() == stamped.date()):
+        print(
+            f"  page showed no time; using the file name's: {stamped:%Y-%m-%d %H:%M} "
+            "(the recorder's time zone, not necessarily yours)"
+        )
+        return stamped
+    return found
 
 
 def write_vault_note(
