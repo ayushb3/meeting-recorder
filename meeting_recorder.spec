@@ -55,6 +55,8 @@ a = Analysis(
         'ui.import_recording_dialog',
         'ui.edit_menu',
         'pipeline.importer',
+        'pipeline.frames',
+        'PIL',
         'config',
         '_build_info',
     ],

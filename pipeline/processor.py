@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from notes.frames import interleave_frames, place_frames
 from notes.writer import week_folder, write_note
 from summarizer.llm import LLMSettings, SummaryUnavailableError, suggest_title, summarize
 from transcriber.whisper import (
@@ -52,6 +53,8 @@ def run_pipeline(
     ollama_prompt: str | None = None,
     single_source: Path | None = None,
     llm: LLMSettings | None = None,
+    frames: list[tuple[int, str]] | None = None,
+    frames_dir: Path | None = None,
 ) -> PipelineResult:
     if llm is None:
         llm = LLMSettings(ollama_model=ollama_model, ollama_host=ollama_host, prompt=ollama_prompt)
@@ -201,13 +204,26 @@ def run_pipeline(
         dest_sys = session_dir / "audio-system.wav"
         note_audio_files = [dest_mic, dest_sys]
 
+    # Copy frames into the final session dir (after the rename sweep, so the path
+    # is settled) and interleave them into the transcript. Frames are an
+    # enhancement: any failure here leaves the plain transcript.
+    note_lines = transcript_lines
+    if frames and frames_dir is not None:
+        try:
+            landed = place_frames(frames, frames_dir, session_dir)
+            if landed:
+                note_lines = interleave_frames(transcript_lines, landed)
+                log.info("Placed %d frame(s) in %s", len(landed), session_dir.name)
+        except Exception as e:
+            log.warning("Could not place frames: %s", e)
+
     try:
         log.info("Writing note to %s", session_dir)
         note_path = write_note(
             dt=session_dt,
             duration_seconds=duration_seconds,
             summary=summary,
-            transcript_lines=transcript_lines,
+            transcript_lines=note_lines,
             audio_files=note_audio_files,
             output_dir=session_dir,
             overwrite=True,

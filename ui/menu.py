@@ -948,6 +948,7 @@ class MeetingRecorderApp(rumps.App):
         session_dt: datetime,
         meeting_name: str | None,
         llm_context: str | None = None,
+        frames_every: int | None = None,
     ):
         """Background thread: prepare audio, then call run_pipeline with single_source."""
         from pipeline.importer import prepare_audio, get_duration_seconds  # noqa: PLC0415
@@ -981,6 +982,20 @@ class MeetingRecorderApp(rumps.App):
                     self._call_on_main(_ui_prep_fail)
                     return
 
+                # Optional: capture frames from the ORIGINAL file (not the converted
+                # wav). Non-fatal — a failure leaves a note without frames.
+                frames: list[tuple[int, str]] = []
+                frames_dir = tmp_dir / "frames"
+                if frames_every:
+                    try:
+                        from pipeline.frames import extract_frames  # noqa: PLC0415
+
+                        frames = extract_frames(
+                            source_path, frames_dir, frames_every, duration_seconds
+                        )
+                    except Exception as e:
+                        log.warning("Frame capture failed: %s", e)
+
                 # Step 3: run the pipeline with single_source
                 result = run_pipeline(
                     mic_path=audio_for_pipeline,   # unused when single_source is set
@@ -998,6 +1013,8 @@ class MeetingRecorderApp(rumps.App):
                     ollama_prompt=self.config.ollama_prompt,
                     single_source=audio_for_pipeline,
                     llm=LLMSettings.from_config(self.config),
+                    frames=frames or None,
+                    frames_dir=frames_dir if frames else None,
                 )
 
             # tmp_dir is cleaned up by TemporaryDirectory context manager at this point
