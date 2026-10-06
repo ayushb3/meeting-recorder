@@ -42,6 +42,7 @@ a = Analysis(
         'summarizer.ollama',
         'notes',
         'notes.writer',
+        'notes.frames',
         'pipeline',
         'pipeline.processor',
         'ui',

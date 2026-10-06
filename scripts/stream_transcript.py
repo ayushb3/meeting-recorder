@@ -33,7 +33,14 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-ROW = '[id^="sub-entry-"]'
+# scripts/ is not a package, so make the repo importable for the shared modules.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from notes.frames import frame_filename, interleave_frames, place_frames  # noqa: E402,F401
+
+ROW ='[id^="sub-entry-"]'
 PROFILE_DIR = Path.home() / ".cache" / "meeting-recorder-spike" / "chrome-profile"
 
 # "Surname, Firstname 1 hours 2 minutes 3 seconds" — anchored at the end. The
@@ -194,41 +201,6 @@ def parse_timestamps(spec: str | None, duration: float | None = None) -> list[in
             )
         out.add(seconds)
     return sorted(out)
-
-
-def frame_filename(seconds: int) -> str:
-    """Name by timestamp, not ordinal — survives a re-run with different steps."""
-    minutes, secs = divmod(int(seconds), 60)
-    return f"frame-{minutes:02d}{secs:02d}.png"
-
-
-def interleave_frames(lines: list[str], frames: list[tuple[int, str]]) -> list[str]:
-    """Insert Obsidian embeds into the transcript at the points they belong to.
-
-    *frames* is (seconds, filename). A frame is emitted before the first
-    transcript line at or after its timestamp, so the note reads as
-    slide -> discussion -> slide. Frames past the last line land at the end.
-    """
-    if not frames:
-        return lines
-
-    def line_seconds(line: str) -> int | None:
-        match = re.match(r"\[(\d+):(\d\d)\]", line)
-        if not match:
-            return None
-        return int(match.group(1)) * 60 + int(match.group(2))
-
-    pending = sorted(frames)
-    out: list[str] = []
-    for line in lines:
-        current = line_seconds(line)
-        while pending and current is not None and pending[0][0] <= current:
-            _, name = pending.pop(0)
-            out.extend([f"![[{name}]]", ""])
-        out.append(line)
-    for _, name in pending:
-        out.extend(["", f"![[{name}]]"])
-    return out
 
 
 def _seek(page, seconds: float) -> None:
@@ -550,18 +522,7 @@ def write_vault_note(
     # interleave them into the transcript at the points they belong to.
     note_lines = lines
     if frames and frames_dir is not None:
-        import shutil  # noqa: PLC0415
-
-        landed: list[tuple[int, str]] = []
-        for seconds, name in frames:
-            source = frames_dir / name
-            if not source.exists():
-                continue
-            try:
-                shutil.copy2(source, session_dir / name)
-                landed.append((seconds, name))
-            except OSError as exc:
-                print(f"  could not place {name}: {exc}")
+        landed = place_frames(frames, frames_dir, session_dir)
         if landed:
             note_lines = interleave_frames(lines, landed)
             print(f"  {len(landed)} frame(s) placed in the session folder")
