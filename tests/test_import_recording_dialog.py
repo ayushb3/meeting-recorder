@@ -93,3 +93,27 @@ def test_validate_dt_field_wrong_format_returns_error():
     assert dt is None
     assert err is not None
     assert "YYYY-MM-DD" in err
+
+
+# ---------------------------------------------------------------------------
+# parse_frames_every
+# ---------------------------------------------------------------------------
+
+import pytest
+
+from ui.import_recording_dialog import parse_frames_every
+
+
+@pytest.mark.parametrize("raw", [None, "", "   "])
+def test_parse_frames_every_blank_is_off(raw):
+    assert parse_frames_every(raw) is None
+
+
+def test_parse_frames_every_number():
+    assert parse_frames_every(" 10 ") == 10
+
+
+@pytest.mark.parametrize("raw", ["0", "-5", "ten", "1.5", "10s"])
+def test_parse_frames_every_rejects_bad_input(raw):
+    with pytest.raises(ValueError):
+        parse_frames_every(raw)

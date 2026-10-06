@@ -69,6 +69,20 @@ def validate_dt_field(raw: str | None) -> tuple[datetime | None, str | None]:
     return dt, None
 
 
+def parse_frames_every(raw: str | None) -> int | None:
+    """Parse the "capture frames every N seconds" field.
+
+    Blank means no frame capture and returns None. Otherwise a whole number of
+    seconds >= 1. Raises ValueError with a message fit to show the user.
+    """
+    if raw is None or not raw.strip():
+        return None
+    text = raw.strip()
+    if not text.isdigit() or int(text) < 1:
+        raise ValueError("Frame interval must be a whole number of seconds (e.g. 10).")
+    return int(text)
+
+
 # ---------------------------------------------------------------------------
 # AppKit window — only imported/instantiated on macOS inside the real app
 # ---------------------------------------------------------------------------
@@ -82,7 +96,7 @@ def _clear_active_refs() -> None:
 def open_import_recording_dialog(
     default_dt: datetime,
     filename: str,
-    on_import: Callable[[datetime, str | None, str | None], None],
+    on_import: Callable[[datetime, str | None, str | None, int | None], None],
     on_cancel: Callable[[], None],
 ) -> None:
     """Show the import confirmation dialog on the current (main) thread.
@@ -91,7 +105,7 @@ def open_import_recording_dialog(
     *filename* is shown in the window subtitle so the user knows which file.
 
     *on_import* is called with ``(confirmed_dt, meeting_name_or_None,
-    llm_context_or_None)`` when the user clicks Import.  *on_cancel* is called
+    llm_context_or_None, frames_every_or_None)`` when the user clicks Import.  *on_cancel* is called
     if they cancel/close.
     """
     try:
@@ -104,7 +118,7 @@ def open_import_recording_dialog(
 def _open_import_recording_dialog_impl(
     default_dt: datetime,
     filename: str,
-    on_import: Callable[[datetime, str | None, str | None], None],
+    on_import: Callable[[datetime, str | None, str | None, int | None], None],
     on_cancel: Callable[[], None],
 ) -> None:
     from AppKit import (  # type: ignore
@@ -133,7 +147,7 @@ def _open_import_recording_dialog_impl(
 
     # Window height: title bar + filename + dt label + dt field + error +
     # title label + title field + context label + context scroll + buttons + padding
-    WINDOW_H = 390
+    WINDOW_H = 444
     style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
     window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         NSMakeRect(0, 0, WINDOW_W, WINDOW_H),
@@ -203,6 +217,17 @@ def _open_import_recording_dialog_impl(
     title_field.setFont_(NSFont.systemFontOfSize_(13))
     content.addSubview_(title_field)
 
+    # ---- Frame capture interval (video files only; blank = off) ----
+    y -= GAP + 16
+    _label("Capture a frame every N seconds (optional, video files)", PAD, y, INNER_W, 16,
+           font_size=11, color=NSColor.secondaryLabelColor())
+
+    y -= GAP + 22
+    frames_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, 100, 22))
+    frames_field.setPlaceholderString_("e.g. 10")
+    frames_field.setFont_(NSFont.systemFontOfSize_(13))
+    content.addSubview_(frames_field)
+
     # ---- Context field (multi-line, mirrors stop_dialog) ----
     y -= GAP * 2 + 16
     _label("Context for AI summary (optional)", PAD, y, INNER_W, 16,
@@ -264,6 +289,7 @@ def _open_import_recording_dialog_impl(
     delegate._window = window
     delegate._dt_field = dt_field
     delegate._title_field = title_field
+    delegate._frames_field = frames_field
     delegate._context_text_view = context_text_view
     delegate._placeholder_lbl = placeholder_lbl
     delegate._error_lbl = error_lbl
@@ -315,9 +341,18 @@ def _make_delegate_class():
                 self._context_text_view.string() if self._context_text_view else ""
             )
 
+            try:
+                frames_every = parse_frames_every(
+                    self._frames_field.stringValue() if self._frames_field else ""
+                )
+            except ValueError as exc:
+                self._error_lbl.setStringValue_(str(exc))
+                return
+
             self._error_lbl.setStringValue_("")
             self._dispatch(confirmed_dt=confirmed_dt, meeting_name=meeting_name,
-                           llm_context=llm_context, cancelled=False)
+                           llm_context=llm_context, frames_every=frames_every,
+                           cancelled=False)
 
         def cancelClicked_(self, sender):
             self._dispatch(confirmed_dt=None, meeting_name=None, llm_context=None, cancelled=True)
@@ -330,7 +365,8 @@ def _make_delegate_class():
             text = self._context_text_view.string() or ""
             self._placeholder_lbl.setHidden_(bool(text.strip()))
 
-        def _dispatch(self, confirmed_dt, meeting_name, llm_context, cancelled: bool):
+        def _dispatch(self, confirmed_dt, meeting_name, llm_context, cancelled: bool,
+                      frames_every=None):
             # Guard against double-fire (window close + button click)
             if self._on_import is None and self._on_cancel is None:
                 return
@@ -347,6 +383,6 @@ def _make_delegate_class():
                     on_cancel()
             else:
                 if on_import and confirmed_dt is not None:
-                    on_import(confirmed_dt, meeting_name, llm_context)
+                    on_import(confirmed_dt, meeting_name, llm_context, frames_every)
 
     return MRImportRecordingDelegate

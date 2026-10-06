@@ -919,16 +919,18 @@ class MeetingRecorderApp(rumps.App):
         from ui.import_recording_dialog import open_import_recording_dialog  # noqa: PLC0415
 
         def _on_import(confirmed_dt: datetime, meeting_name: str | None,
-                       llm_context: str | None = None):
+                       llm_context: str | None = None,
+                       frames_every: int | None = None):
             self._set_processing()
             log.info(
-                "Dispatching import pipeline: file=%s dt=%s name=%s context=%s",
+                "Dispatching import pipeline: file=%s dt=%s name=%s context=%s frames_every=%s",
                 source_path.name, confirmed_dt, meeting_name,
                 f"{len(llm_context)} chars" if llm_context else "none",
+                frames_every,
             )
             threading.Thread(
                 target=self._run_import_pipeline,
-                args=(source_path, confirmed_dt, meeting_name, llm_context),
+                args=(source_path, confirmed_dt, meeting_name, llm_context, frames_every),
                 daemon=True,
             ).start()
 
