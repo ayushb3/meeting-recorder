@@ -124,3 +124,16 @@ class TestFramesEvery:
         assert frames_cli_flag("every 10") == ["--frames-every", "10"]
         assert frames_cli_flag("7:46,19:40") == ["--frames-at", "7:46,19:40"]
         assert frames_cli_flag(None) == []
+
+
+def test_dialog_window_is_not_released_when_closed():
+    """Regression: the Stream dialog crashed the app on close (SIGSEGV in
+    _NSWindowTransformAnimation dealloc) because the window was released on close
+    while Python still held it. Every dialog window must opt out."""
+    import pathlib
+    import re
+
+    src = pathlib.Path(__file__).parent.parent / "ui"
+    for name in ("transcript_url_dialog", "import_recording_dialog", "stop_dialog", "settings_window"):
+        text = (src / f"{name}.py").read_text()
+        assert re.search(r"setReleasedWhenClosed_\(\s*False\s*\)", text), name
