@@ -121,6 +121,7 @@ def _clear_active_refs() -> None:
 
 def open_transcript_url_dialog(
     on_submit: Callable[[str, str | None, str | None, str | None], None],
+    default_frames: str | None = None,
 ) -> None:
     """Show the URL dialog. Calls *on_submit(url, name, frames_at, context)*.
 
@@ -295,7 +296,9 @@ def open_transcript_url_dialog(
 
     y -= GAP + 22
     frames_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, INNER_W, 22))
-    frames_field.setPlaceholderString_("7:46, 19:40  or  every 10 — optional")
+    if default_frames:
+        frames_field.setStringValue_(default_frames)
+    frames_field.setPlaceholderString_("7:46, 19:40  or  every 10 — blank = none")
     frames_field.setFont_(NSFont.systemFontOfSize_(12))
     content.addSubview_(frames_field)
 

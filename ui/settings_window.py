@@ -191,6 +191,8 @@ def build_toml_text(fields: dict) -> str:
         "# Mic RMS threshold (0-32767). Frames below this are silenced (suppresses speaker backwash).",
         "# Raise if you still hear bleed; lower if your own voice is being cut off.",
         f"mic_threshold = {mic_thr}",
+        "# Seconds between frames captured from imported video (0 = off).",
+        f"frames_every = {int(fields.get('frames_every', 10))}",
     ]
 
     # ---- [llm] section (only emitted when fields contain llm keys) ----
@@ -264,6 +266,9 @@ def preserved_config_fields(path: Path) -> dict:
     out: dict = {}
     if isinstance(raw.get("vault"), dict) and raw["vault"]:
         out["vault"] = raw["vault"]
+    frames_every = raw.get("processing", {}).get("frames_every")
+    if isinstance(frames_every, int) and not isinstance(frames_every, bool):
+        out["frames_every"] = frames_every
     prompt_file = raw.get("llm", {}).get("prompt_file")
     if prompt_file:
         out["llm_prompt_file"] = prompt_file

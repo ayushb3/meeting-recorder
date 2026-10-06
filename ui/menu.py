@@ -889,7 +889,11 @@ class MeetingRecorderApp(rumps.App):
                 log.info("URL does not look like a Stream recording; running anyway")
             self._launch_transcript_scrape(url, name=name, frames_at=frames_at, context=context)
 
-        open_transcript_url_dialog(on_submit=_on_submit)
+        every = self.config.frames_every
+        open_transcript_url_dialog(
+            on_submit=_on_submit,
+            default_frames=f"every {every}" if every else None,
+        )
 
     def import_recording(self, _):
         """Import a local audio or video file and produce a summarised note.
@@ -943,6 +947,7 @@ class MeetingRecorderApp(rumps.App):
             filename=source_path.name,
             on_import=_on_import,
             on_cancel=_on_cancel,
+            default_frames_every=self.config.frames_every or None,
         )
 
     def _run_import_pipeline(

@@ -98,6 +98,7 @@ def open_import_recording_dialog(
     filename: str,
     on_import: Callable[[datetime, str | None, str | None, int | None], None],
     on_cancel: Callable[[], None],
+    default_frames_every: int | None = None,
 ) -> None:
     """Show the import confirmation dialog on the current (main) thread.
 
@@ -109,7 +110,9 @@ def open_import_recording_dialog(
     if they cancel/close.
     """
     try:
-        _open_import_recording_dialog_impl(default_dt, filename, on_import, on_cancel)
+        _open_import_recording_dialog_impl(
+            default_dt, filename, on_import, on_cancel, default_frames_every
+        )
     except Exception:
         log.exception("Failed to open import recording dialog — cancelling")
         on_cancel()
@@ -120,6 +123,7 @@ def _open_import_recording_dialog_impl(
     filename: str,
     on_import: Callable[[datetime, str | None, str | None, int | None], None],
     on_cancel: Callable[[], None],
+    default_frames_every: int | None = None,
 ) -> None:
     from AppKit import (  # type: ignore
         NSApp,
@@ -219,12 +223,14 @@ def _open_import_recording_dialog_impl(
 
     # ---- Frame capture interval (video files only; blank = off) ----
     y -= GAP + 16
-    _label("Capture a frame every N seconds (optional, video files)", PAD, y, INNER_W, 16,
+    _label("Capture a frame every N seconds (video files; blank = none)", PAD, y, INNER_W, 16,
            font_size=11, color=NSColor.secondaryLabelColor())
 
     y -= GAP + 22
     frames_field = NSTextField.alloc().initWithFrame_(NSMakeRect(PAD, y, 100, 22))
-    frames_field.setPlaceholderString_("e.g. 10")
+    if default_frames_every:
+        frames_field.setStringValue_(str(default_frames_every))
+    frames_field.setPlaceholderString_("blank = no frames")
     frames_field.setFont_(NSFont.systemFontOfSize_(13))
     content.addSubview_(frames_field)
 

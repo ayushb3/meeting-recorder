@@ -597,3 +597,19 @@ def test_vault_and_prompt_file_survive_a_save(tmp_path):
     }
     assert saved["llm"]["prompt_file"] == "~/private/prompt.txt"
     assert "prompt" not in saved["ollama"]
+
+
+def test_frames_every_survives_a_save(tmp_path):
+    import tomllib
+    from ui.settings_window import build_toml_text, preserved_config_fields
+
+    original = tmp_path / "config.toml"
+    original.write_text("[processing]\nframes_every = 0\n")
+    fields = {
+        "output_dir": "/x", "system_device": "a", "mic_device": "b",
+        "whisper_model": "m", "whisper_binary": "b", "ollama_model": "o",
+        "ollama_host": "h", "keep_audio": True, "min_recording_seconds": 30,
+        "low_disk_threshold_mb": 500, "mic_threshold": 300, "llm_provider": "ollama",
+    }
+    fields.update(preserved_config_fields(original))
+    assert tomllib.loads(build_toml_text(fields))["processing"]["frames_every"] == 0
