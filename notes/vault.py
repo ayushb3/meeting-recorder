@@ -137,8 +137,9 @@ def _link_targets(text: str) -> set[str]:
 _INSTRUCTIONS = (
     "Current work context from the user's notes. Use it only to recognise names "
     "and to relate the meeting to existing work; do not summarise it. When you "
-    "mention a project or person that appears below, write it as [[Name]] using "
-    "that exact spelling. Never create a [[link]] to anything not listed below."
+    "refer to a project or note that appears below, you may write it as [[Name]] "
+    "using that exact spelling. Never create a [[link]] to anything not listed "
+    "below, and write people's names as plain text."
 )
 
 
