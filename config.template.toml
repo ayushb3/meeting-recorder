@@ -59,6 +59,26 @@ model = ""
 terms = ""
 # If the hosted model cannot be reached (offline, off VPN), summarize with Ollama.
 fallback_to_ollama = true
+# Keep a tuned prompt outside this file (and outside any repo). It must contain
+# {transcript} and may contain {context}; it outranks [ollama] prompt. A missing
+# or invalid file falls back to the built-in prompt.
+# prompt_file = "~/Documents/my-summary-prompt.txt"
+
+# Optional: ground summaries in an Obsidian vault and log each note in the daily
+# note. Off unless root is set. Nothing here is sent anywhere except to the
+# summarizer you configured above.
+# [vault]
+# root = "~/Documents/MyVault"
+# # Command run (from root) before each summary to refresh a status file. Use
+# # absolute paths — the app does not inherit your shell's PATH. Failure is ignored.
+# orient_command = "/usr/bin/python3 scripts/orient.py"
+# status_file = "NOW.md"
+# daily_notes_dir = "Daily Notes"        # files named YYYY-MM-DD.md
+# daily_notes_to_read = 2                # most recent daily notes, up to the meeting date
+# sections = ["Today", "Active Projects", "Waiting on / Blocked"]
+# context_max_chars = 3000
+# write_daily_note = false               # log the meeting under the daily note's notes section
+# notes_section = "Notes Created"
 
 [processing]
 keep_audio = true

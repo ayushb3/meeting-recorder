@@ -121,6 +121,7 @@ Clicking it opens a system file picker. Any format your macOS can decode is acce
 |---|---|
 | **Recording date and time** | Pre-filled from the file's modification date. Edit it if the mtime is wrong (e.g. a file copied from another machine). Format: `YYYY-MM-DD HH:MM`. |
 | **Suggested title** (optional) | Used as the folder and note title. Leave blank to let the LLM choose a title from the transcript. |
+| **Capture a frame every N seconds** (optional) | For video files. Pulls a frame every N seconds with ffmpeg, drops near-duplicates, and embeds the rest in the note at the point they were on screen. Blank means no frames. Audio-only files are skipped. |
 | **Context for AI summary** (optional) | Attendees, project names, technical terms — anything that helps the AI produce a better summary. |
 
 Click **Import** (or press Return) to start the pipeline, or **Cancel** to abort.
@@ -137,7 +138,7 @@ Clicking it opens a dialog with:
 |---|---|
 | **Recording URL** | Paste the URL from the browser address bar. |
 | **Title** (optional) | Meeting title. Leave blank to let the LLM suggest one. |
-| **Frames at** (optional) | Comma-separated timestamps (e.g. `7:46, 19:40`, or in H:MM:SS format). At each timestamp, a screenshot of the screenshare is captured and embedded in the note at the corresponding point in the transcript. Accepts seconds (e.g. `466`), M:SS, or H:MM:SS. |
+| **Frames** (optional) | Comma-separated timestamps (e.g. `7:46, 19:40`, or in H:MM:SS format), or `every 10` for a frame every 10 seconds with near-duplicates dropped. Screenshots of the screenshare are embedded in the note at the corresponding point in the transcript. Timestamps accept seconds (e.g. `466`), M:SS, or H:MM:SS. |
 | **Context for AI summary** (optional) | Attendees, project names, terms. |
 
 Click **Scrape Transcript** to proceed.

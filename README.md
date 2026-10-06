@@ -206,6 +206,32 @@ For scripts and tests, the `MEETING_RECORDER_LLM_KEY` environment variable is al
 
 The **Settings → Summarizer** section in the app mirrors all of these fields. When a `base_url` and API key are present, the model dropdown is populated live by querying the endpoint's `/models` list.
 
+### Private prompt and vault context
+
+**`[llm] prompt_file`** points at a summary prompt kept outside this repo — a file with
+`{transcript}` and optionally `{context}`. It outranks the inline `[ollama] prompt`. A missing
+or invalid file falls back to the built-in prompt. Tune the prompt for your own meetings there
+and the public default stays generic.
+
+**`[vault]`** is off unless `root` is set. When it is, each summary is given a small, bounded
+block of current work context so it uses real project and people names:
+
+1. `orient_command` (optional) refreshes a status file first. Use absolute paths — a Finder-launched
+   app does not inherit your shell's `PATH`. A failure is ignored.
+2. `status_file` (default `NOW.md`) is read.
+3. The `sections` (default Today, Active Projects, Waiting on / Blocked) of the last
+   `daily_notes_to_read` daily notes, up to the meeting's date, are read.
+
+The whole block is capped at `context_max_chars`. The model may write `[[links]]` only to names
+that appear in it or in the vault's `vault-index.json`; any other link is flattened to plain text
+so a summary never creates dangling notes. With `write_daily_note = true`, the finished note is
+also logged under the meeting date's daily note (`notes_section`, default `Notes Created`) using a
+vault-relative link. A missing daily note is never created. Every failure degrades to no context
+or no link — it cannot stop a note being written.
+
+All of this lives in your own config under `~/Library/Application Support/MeetingRecorder/`;
+nothing about your vault is stored in or sent to this repo.
+
 ### capture_method
 
 | Value | Behaviour |
@@ -234,6 +260,7 @@ Recording never waits on the summarizer. If the model is unreachable the transcr
 - Confirm or correct the recording date and time (pre-filled from the file's modification date)
 - Set an optional meeting title
 - Add optional context for the AI (attendees, project names, technical terms)
+- Capture a frame every N seconds from a video, so the note shows what was on screen as well as what was said (near-duplicate frames are dropped)
 
 The original file is never moved or modified.
 

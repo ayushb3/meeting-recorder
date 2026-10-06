@@ -46,7 +46,7 @@ The dialog fields:
 |---|---|
 | **Recording URL** | Paste the URL from the browser address bar. |
 | **Title** (optional) | Meeting title. Leave blank to let the LLM suggest one. |
-| **Frames at** (optional) | Comma-separated timestamps (e.g. `7:46, 19:40`). A screenshot of the screenshare is captured at each timestamp and embedded in the note. Accepts plain seconds (e.g. `466`), M:SS, or H:MM:SS. |
+| **Frames** (optional) | Comma-separated timestamps (e.g. `7:46, 19:40`), or `every 10` for a frame every 10 seconds. A screenshot of the screenshare is captured and embedded in the note. Timestamps accept plain seconds (e.g. `466`), M:SS, or H:MM:SS. See [Frames](#frames). |
 | **Context for AI summary** (optional) | Attendees, project names, technical terms. |
 
 Terminal opens and runs the scrape where you can watch it. The `↗` means it leaves the app,
@@ -68,6 +68,7 @@ Quote the URL — Stream URLs contain `&`, and an unquoted one gets mangled by t
 | `--date YYYY-MM-DD` | Recording date, if it cannot be detected from the page |
 | `--steps N` | Seek steps across the timeline (default 50) |
 | `--frames-at TIMES` | Capture screenshare screenshots at comma-separated timestamps and embed them in the note (e.g. `7:46,19:40,1:02:15`) |
+| `--frames-every SECONDS` | Capture a frame every N seconds, dropping near-duplicates. Not combinable with `--frames-at`. See [Frames](#frames). |
 | `--context TEXT` | Context passed to the summariser (attendees, terms, etc.) |
 
 With neither `--out` nor `--note`, the transcript prints to stdout.
@@ -136,17 +137,31 @@ No change to this script fixes that — the code is quotable to IT as-is.
 
 ---
 
-## Tip: extracting frames from a downloaded video
+## Frames
 
-If you have downloaded the recording as a video file (rather than using the Stream page), you can extract frames manually with ffmpeg and then reference the timestamps with `--frames-at` when you run the scraper against the Stream URL. For example, to grab one frame every 10 seconds:
+A transcript loses what was shown. Two flags capture the shared screen and embed each
+frame in the note where it was on screen, so it reads slide → discussion → slide.
 
-```bash
-ffmpeg -i recording.mp4 -vf "fps=1/10" frame-%04d.png
-```
+| Flag | What it does |
+|---|---|
+| `--frames-at 7:46,19:40` | One frame at each listed time. Use when you already know which moments matter. |
+| `--frames-every 10` | A frame every 10 seconds, then near-duplicates are dropped. Cannot be combined with `--frames-at`. |
 
-Look at the generated images to find timestamps worth highlighting, then pass those to `--frames-at` (or the **Frames at** field in the dialog).
+In the dialog, the **Frames** field takes either form: `7:46, 19:40` or `every 10`.
 
-Note that the **Import Recording…** path (local file import) does not capture screenshare frames itself — `--frames-at` is only available on the Stream scrape path, which has access to the video playhead.
+`--frames-every` compares each frame against the last one *kept* and drops it if it barely
+changed, since a screen mostly holds still. A recording long enough that the interval would
+exceed 600 frames has its interval raised to fit. If the player will not report the
+recording's length, `--frames-every` stops with an error; use `--frames-at` instead.
+
+Frames are written next to `meeting.md` as `frame-MMSS.png`. They are screenshots of real
+meetings, so they are gitignored and never belong in a commit.
+
+### Local files get frames too
+
+**Import Recording…** has a *Capture a frame every N seconds* field. Blank leaves the
+import exactly as before. It uses ffmpeg on the original video file — your file is only
+ever read — and applies the same de-duplication. Audio-only files are skipped.
 
 ---
 
