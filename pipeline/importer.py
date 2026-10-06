@@ -144,3 +144,43 @@ def prepare_audio(
         raise AudioImportError(f"ffmpeg produced no output file at {out_path}")
 
     return out_path
+
+
+def get_recording_datetime(
+    source: Path,
+    ffprobe: Path = FFPROBE_DEFAULT,
+) -> "datetime | None":
+    """When the recording was actually made, from its container metadata.
+
+    Video and audio files from Teams, phones and most recorders carry a
+    ``creation_time`` tag; unlike the file's modification time it survives a
+    copy or download. Returned as naive local time (the tag is UTC), or None when
+    absent or unreadable so callers can fall back to the mtime.
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    cmd = [
+        str(ffprobe), "-v", "error",
+        "-show_entries", "format_tags=creation_time",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(source),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    raw = result.stdout.strip().splitlines()[0].strip() if result.stdout.strip() else ""
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    # ffmpeg writes 1970-01-01 when a tool had no real clock.
+    if parsed.year < 2000:
+        return None
+    return parsed.astimezone().replace(tzinfo=None)

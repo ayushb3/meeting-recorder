@@ -914,12 +914,16 @@ class MeetingRecorderApp(rumps.App):
 
         source_path = Path(chosen)
 
-        # Default datetime from the file's mtime
-        try:
-            mtime = source_path.stat().st_mtime
-            default_dt = datetime.fromtimestamp(mtime)
-        except OSError:
-            default_dt = datetime.now()
+        # Default datetime: when the recording was actually made (container
+        # metadata), else the file's mtime, which a copy or download resets.
+        from pipeline.importer import get_recording_datetime  # noqa: PLC0415
+
+        default_dt = get_recording_datetime(source_path)
+        if default_dt is None:
+            try:
+                default_dt = datetime.fromtimestamp(source_path.stat().st_mtime)
+            except OSError:
+                default_dt = datetime.now()
 
         from ui.import_recording_dialog import open_import_recording_dialog  # noqa: PLC0415
 

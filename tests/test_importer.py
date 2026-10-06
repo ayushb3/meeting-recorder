@@ -211,3 +211,22 @@ def test_prepare_audio_raises_when_ffmpeg_missing(tmp_path):
     with patch("pipeline.importer.subprocess.run", side_effect=FileNotFoundError("no ffmpeg")):
         with pytest.raises(AudioImportError, match="not found or failed to start"):
             prepare_audio(source, dest_dir)
+
+
+class TestGetRecordingDatetime:
+    def _run(self, stdout, returncode=0):
+        from unittest.mock import MagicMock, patch
+        from pipeline.importer import get_recording_datetime
+        with patch("pipeline.importer.subprocess.run",
+                   return_value=MagicMock(returncode=returncode, stdout=stdout, stderr="")):
+            return get_recording_datetime(Path("x.mp4"), ffprobe=Path("ffprobe"))
+
+    def test_utc_tag_becomes_naive_local_time(self):
+        from datetime import datetime, timezone
+        got = self._run("2026-10-05T16:01:49.000000Z\n")
+        expected = datetime(2026, 10, 5, 16, 1, 49, tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
+        assert got == expected and got.tzinfo is None
+
+    @pytest.mark.parametrize("stdout,rc", [("", 0), ("garbage\n", 0), ("1970-01-01T00:00:00Z\n", 0), ("2026-10-05T16:01:49Z", 1)])
+    def test_missing_or_bogus_is_none(self, stdout, rc):
+        assert self._run(stdout, rc) is None

@@ -204,3 +204,42 @@ def test_frames_at_and_frames_every_are_mutually_exclusive(capsys):
     captured = capsys.readouterr()
     assert code != 0
     assert "not both" in captured.err + captured.out
+
+
+# ---------------------------------------------------------------------------
+# Actual recording time
+# ---------------------------------------------------------------------------
+
+from datetime import datetime  # noqa: E402
+
+from stream_transcript import filename_datetime, parse_recording_datetime  # noqa: E402
+
+
+class TestParseRecordingDatetime:
+    @pytest.mark.parametrize("text,expected", [
+        ("Recorded October 5, 2026, 9:01 AM", datetime(2026, 10, 5, 9, 1)),
+        ("October 5, 2026 at 2:30 PM", datetime(2026, 10, 5, 14, 30)),
+        ("Oct 5, 2026 12:05 AM", datetime(2026, 10, 5, 0, 5)),
+        ("Oct 5, 2026 12:05 PM", datetime(2026, 10, 5, 12, 5)),
+        ("October 5, 2026 14:30", datetime(2026, 10, 5, 14, 30)),
+        ("October 5, 2026", datetime(2026, 10, 5)),
+    ])
+    def test_forms(self, text, expected):
+        assert parse_recording_datetime(text) == expected
+
+    def test_no_date_is_none(self):
+        assert parse_recording_datetime("nothing here 9:01 AM") is None
+
+    def test_impossible_time_falls_back_to_the_date(self):
+        assert parse_recording_datetime("October 5, 2026 13:75 PM") == datetime(2026, 10, 5)
+
+
+class TestFilenameDatetime:
+    def test_teams_style_name_percent_encoded(self):
+        url = ("https://x.example/stream.aspx?id=%2Fa%2FTeam%20Tech%2D20261005%5F090149"
+               "%2DMeeting%20Recording%2Emp4")
+        assert filename_datetime(url) == datetime(2026, 10, 5, 9, 1, 49)
+
+    def test_none_when_absent_or_impossible(self):
+        assert filename_datetime("https://x.example/stream.aspx?id=abc") is None
+        assert filename_datetime("x-20261305_090149") is None
