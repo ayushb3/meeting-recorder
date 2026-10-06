@@ -234,6 +234,11 @@ def open_transcript_url_dialog(
         False,
     )
     window.setTitle_("Import Transcript from Stream")
+    # NSWindow defaults to releasing itself on close, but Python also holds a
+    # reference (the module-level _active_window). Closing then over-releases and
+    # crashes in -[_NSWindowTransformAnimation dealloc] on the next run-loop pass.
+    # The other dialogs already do this; this one did not.
+    window.setReleasedWhenClosed_(False)
     window.center()
 
     content = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, WIDTH, height))
