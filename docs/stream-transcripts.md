@@ -147,7 +147,7 @@ frame in the note where it was on screen, so it reads slide → discussion → s
 | `--frames-at 7:46,19:40` | One frame at each listed time. Use when you already know which moments matter. |
 | `--frames-every 10` | A frame every 10 seconds, then near-duplicates are dropped. Cannot be combined with `--frames-at`. |
 
-In the dialog, the **Frames** field takes either form: `7:46, 19:40` or `every 10`.
+In the dialog, the **Frames** field is pre-filled with `every 10` (your `[processing] frames_every`; `0` turns the default off) and takes either form: `7:46, 19:40` or `every 10`. Clear it to skip frames.
 
 `--frames-every` compares each frame against the last one *kept* and drops it if it barely
 changed, since a screen mostly holds still. A recording long enough that the interval would
@@ -159,8 +159,8 @@ meetings, so they are gitignored and never belong in a commit.
 
 ### Local files get frames too
 
-**Import Recording…** has a *Capture a frame every N seconds* field. Blank leaves the
-import exactly as before. It uses ffmpeg on the original video file — your file is only
+**Import Recording…** has a *Capture a frame every N seconds* field, pre-filled from `[processing] frames_every` (default 10; `0` = off). Clear it for one import without frames.
+It uses ffmpeg on the original video file — your file is only
 ever read — and applies the same de-duplication. Audio-only files are skipped.
 
 ---

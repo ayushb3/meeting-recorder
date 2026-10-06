@@ -121,7 +121,7 @@ Clicking it opens a system file picker. Any format your macOS can decode is acce
 |---|---|
 | **Recording date and time** | Pre-filled from the file's modification date. Edit it if the mtime is wrong (e.g. a file copied from another machine). Format: `YYYY-MM-DD HH:MM`. |
 | **Suggested title** (optional) | Used as the folder and note title. Leave blank to let the LLM choose a title from the transcript. |
-| **Capture a frame every N seconds** (optional) | For video files. Pulls a frame every N seconds with ffmpeg, drops near-duplicates, and embeds the rest in the note at the point they were on screen. Blank means no frames. Audio-only files are skipped. |
+| **Capture a frame every N seconds** (optional) | For video files. Pulls a frame every N seconds with ffmpeg, drops near-duplicates, and embeds the rest in the note at the point they were on screen. Pre-filled with `frames_every` from your config (default 10); clear it to skip frames for this import. Audio-only files are skipped. |
 | **Context for AI summary** (optional) | Attendees, project names, technical terms — anything that helps the AI produce a better summary. |
 
 Click **Import** (or press Return) to start the pipeline, or **Cancel** to abort.

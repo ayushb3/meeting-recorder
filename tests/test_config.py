@@ -179,3 +179,24 @@ def test_bad_prompt_file_falls_back_to_default(tmp_path):
     no_placeholder.write_text("no placeholder here")
     bad = load_config(_write_cfg(tmp_path, f'[llm]\nprompt_file = "{no_placeholder}"\n'))
     assert bad.ollama_prompt is None
+
+
+def test_frames_every_defaults_to_ten_and_zero_turns_it_off(tmp_path):
+    from config import load_config
+    assert load_config(_write_cfg(tmp_path)).frames_every == 10
+    off = _write_cfg(tmp_path).read_text().replace(
+        "low_disk_threshold_mb = 500", "low_disk_threshold_mb = 500\nframes_every = 0")
+    path = tmp_path / "off.toml"
+    path.write_text(off)
+    assert load_config(path).frames_every == 0
+
+
+def test_negative_frames_every_is_rejected(tmp_path):
+    import pytest
+    from config import load_config
+    text = _write_cfg(tmp_path).read_text().replace(
+        "low_disk_threshold_mb = 500", "low_disk_threshold_mb = 500\nframes_every = -5")
+    path = tmp_path / "neg.toml"
+    path.write_text(text)
+    with pytest.raises(ValueError, match="frames_every"):
+        load_config(path)

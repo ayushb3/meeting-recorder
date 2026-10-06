@@ -76,6 +76,8 @@ class Config:
     llm_terms: str | None = None
     llm_fallback_to_ollama: bool = True
     vault: VaultConfig | None = None
+    # Seconds between captured frames for video imports; 0 turns capture off.
+    frames_every: int = 10
 
 
 def _load_vault(raw: dict) -> VaultConfig | None:
@@ -155,7 +157,11 @@ def load_config(path: Path) -> Config:
         llm_terms=raw.get("llm", {}).get("terms") or None,
         llm_fallback_to_ollama=raw.get("llm", {}).get("fallback_to_ollama", True),
         vault=_load_vault(raw),
+        frames_every=int(raw["processing"].get("frames_every", 10)),
     )
+
+    if cfg.frames_every < 0:
+        raise ValueError("[processing] frames_every must be 0 (off) or a number of seconds.")
 
     if cfg.llm_provider not in ("ollama", "openai", "anthropic"):
         raise ValueError(
